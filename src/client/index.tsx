@@ -133,6 +133,7 @@ function ChatPage() {
 	const messagesContainerRef = useRef<HTMLDivElement>(null);
 	const userMenuRef = useRef<HTMLDivElement>(null);
 	const navigate = useNavigate();
+	const originalTitleRef = useRef<string>("ChatV2");
 
 	// Load session and user
 	useEffect(() => {
@@ -151,7 +152,23 @@ function ChatPage() {
 	// Handle incoming WebSocket messages
 	const handleWebSocketMessage = useCallback((message: WSMessage) => {
 		switch (message.type) {
-			case "new_message":
+			case "new_message": {
+				// Use functional update to check if room exists and add it if not
+				setRooms((prevRooms) => {
+					const roomExists = prevRooms.some((r) => r.id === message.message.room_id);
+					if (!roomExists) {
+						// Create a new room object from the message info
+						const newRoom: Room = {
+							id: message.message.room_id,
+							name: message.user.nickname || message.user.username,
+							type: "private",
+							created_at: Date.now(),
+						};
+						return [newRoom, ...prevRooms];
+					}
+					return prevRooms;
+				});
+
 				if (selectedRoom?.id === message.message.room_id) {
 					setMessages((prev) => {
 						// Check if message already exists (including temp messages from current user)
@@ -182,7 +199,7 @@ function ChatPage() {
 						return [...prev, message.user];
 					});
 				} else {
-					// Update unread count for other rooms
+					// Update unread count for other rooms (including new rooms)
 					if (message.message.user_id !== currentUser?.id) {
 						setUnreadCounts((prev) => {
 							const newMap = new Map(prev);
@@ -192,6 +209,7 @@ function ChatPage() {
 					}
 				}
 				break;
+			}
 
 			case "room_messages":
 				if (selectedRoom?.id === message.room_id) {
@@ -265,6 +283,16 @@ function ChatPage() {
 			loadRooms();
 		}
 	}, [session]);
+
+	// Update page title with unread count
+	useEffect(() => {
+		const totalUnread = Array.from(unreadCounts.values()).reduce((sum, count) => sum + count, 0);
+		if (totalUnread > 0) {
+			document.title = `(${totalUnread}) ChatV2`;
+		} else {
+			document.title = originalTitleRef.current;
+		}
+	}, [unreadCounts]);
 
 	// Handle room selection
 	const handleSelectRoom = (room: Room) => {

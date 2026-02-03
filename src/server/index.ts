@@ -1033,8 +1033,8 @@ export class ChatV2 extends Server<Env> {
 			console.log(`[Broadcast] Connection type: ${attachment.type}`);
 
 			if (attachment.type === "user") {
-				// Send to room members who have joined the room
-				if (memberIds.has(attachment.userId) && attachment.joinedRooms.includes(roomId)) {
+				// Send to all room members
+				if (memberIds.has(attachment.userId)) {
 					connection.send(JSON.stringify(message));
 					sentCount++;
 				}
