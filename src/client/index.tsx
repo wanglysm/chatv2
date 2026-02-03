@@ -2,9 +2,98 @@ import { createRoot } from "react-dom/client";
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router";
 import { useWebSocket } from "./hooks/useWebSocket";
-import type { User, Room, Message, Session, WSMessage, APIResponse } from "../shared";
+import type { User, Room, Message, Session, WSMessage, APIResponse, MessageContent } from "../shared";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
+
+// Parse message content
+function parseMessageContent(message: Message): MessageContent {
+	if (!message.content_type || message.content_type === "text") {
+		try {
+			return JSON.parse(message.content);
+		} catch {
+			return { type: "text", text: message.content };
+		}
+	}
+	return JSON.parse(message.content);
+}
+
+// Message content renderer component
+function MessageContentRenderer({ message }: { message: Message }) {
+	const content = parseMessageContent(message);
+
+	switch (content.type) {
+		case "text":
+			return (
+				<div
+					className="message-text markdown-content"
+					dangerouslySetInnerHTML={{
+						__html: DOMPurify.sanitize(marked.parse(content.text) as string),
+					}}
+				/>
+			);
+
+		case "image":
+			return (
+				<div className="message-image">
+					<img
+						src={`data:${content.mime_type};base64,${content.data}`}
+						alt={content.name || "图片"}
+						style={{ maxWidth: "300px", borderRadius: "8px", cursor: "pointer" }}
+						onClick={() => window.open(`data:${content.mime_type};base64,${content.data}`, "_blank")}
+					/>
+				</div>
+			);
+
+		case "audio":
+			return (
+				<div className="message-audio">
+					<audio controls src={`data:${content.mime_type};base64,${content.data}`} />
+				</div>
+			);
+
+		case "video":
+			return (
+				<div className="message-video">
+					<video
+						controls
+						src={`data:${content.mime_type};base64,${content.data}`}
+						style={{ maxWidth: "300px", borderRadius: "8px" }}
+					/>
+				</div>
+			);
+
+		case "location":
+			return (
+				<div className="message-location">
+					📍 {content.address || `${content.latitude.toFixed(6)}, ${content.longitude.toFixed(6)}`}
+				</div>
+			);
+
+		case "card":
+			return (
+				<div className="message-card">
+					<div className="card-title">{content.title}</div>
+					{content.description && <div className="card-desc">{content.description}</div>}
+					{content.url && (
+						<a href={content.url} target="_blank" rel="noopener noreferrer">
+							查看详情 →
+						</a>
+					)}
+				</div>
+			);
+
+		case "file":
+			return (
+				<div className="message-file">
+					📎 {content.name || "文件"}
+				</div>
+			);
+
+		default:
+			return <div className="message-text">{message.content}</div>;
+	}
+}
 
 // Connection status indicator component
 function ConnectionStatus({ state, reconnectAttempt }: { state: string; reconnectAttempt: number }) {
@@ -134,6 +223,7 @@ function ChatPage() {
 
 	const messagesContainerRef = useRef<HTMLDivElement>(null);
 	const userMenuRef = useRef<HTMLDivElement>(null);
+	const fileInputRef = useRef<HTMLInputElement>(null);
 	const navigate = useNavigate();
 	const originalTitleRef = useRef<string>("ChatV2");
 
@@ -331,15 +421,17 @@ function ChatPage() {
 		}
 	};
 
-	// Send message
+	// Send text message
 	const handleSendMessage = async () => {
 		if (!messageInput.trim() || !selectedRoom || !currentUser) return;
 
+		const contentObj = { type: "text" as const, text: messageInput };
 		const tempMessage: Message = {
 			id: `temp-${Date.now()}`,
 			room_id: selectedRoom.id,
 			user_id: currentUser.id,
-			content: messageInput,
+			content: JSON.stringify(contentObj),
+			content_type: "text",
 			created_at: Date.now(),
 		};
 
@@ -355,7 +447,8 @@ function ChatPage() {
 				},
 				body: JSON.stringify({
 					room_id: selectedRoom.id,
-					content: messageInput,
+					content: JSON.stringify(contentObj),
+					content_type: "text",
 				}),
 			});
 
@@ -370,6 +463,76 @@ function ChatPage() {
 			setMessageInput(messageInput);
 			console.error("发送消息失败:", err);
 		}
+	};
+
+	// Handle file select
+	const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+		const file = e.target.files?.[0];
+		if (!file || !selectedRoom || !currentUser) return;
+
+		// Check file size (max 5MB)
+		if (file.size > 5 * 1024 * 1024) {
+			alert("文件大小不能超过 5MB");
+			return;
+		}
+
+		const reader = new FileReader();
+		reader.onload = async () => {
+			const base64 = (reader.result as string).split(",")[1];
+			const mimeType = file.type;
+
+			let contentType: "image" | "audio" | "video" | "file" = "file";
+			if (mimeType.startsWith("image/")) contentType = "image";
+			else if (mimeType.startsWith("audio/")) contentType = "audio";
+			else if (mimeType.startsWith("video/")) contentType = "video";
+
+			const contentObj = {
+				type: contentType,
+				data: base64,
+				mime_type: mimeType,
+				name: file.name,
+			};
+
+			const tempMessage: Message = {
+				id: `temp-${Date.now()}`,
+				room_id: selectedRoom.id,
+				user_id: currentUser.id,
+				content: JSON.stringify(contentObj),
+				content_type: contentType,
+				created_at: Date.now(),
+			};
+
+			setMessages((prev) => [...prev, tempMessage]);
+
+			try {
+				const response = await fetch("/api/messages", {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						Authorization: `Bearer ${session?.id}`,
+					},
+					body: JSON.stringify({
+						room_id: selectedRoom.id,
+						content: JSON.stringify(contentObj),
+						content_type: contentType,
+					}),
+				});
+
+				const data = (await response.json()) as APIResponse<{ message_id: string }>;
+				if (!data.success) {
+					setMessages((prev) => prev.filter((m) => m.id !== tempMessage.id));
+					alert("发送文件失败: " + data.error);
+				}
+			} catch (err) {
+				setMessages((prev) => prev.filter((m) => m.id !== tempMessage.id));
+				console.error("发送文件失败:", err);
+				alert("发送文件失败");
+			}
+		};
+
+		reader.readAsDataURL(file);
+		// Reset file input
+		e.target.value = "";
 	};
 
 	// Scroll to bottom when messages change
@@ -593,22 +756,32 @@ function ChatPage() {
 											<div className="message-avatar">{user?.avatar || "👤"}</div>
 										)}
 										<div className="message-content">
-											{!isOwnMessage && (
-												<div className="message-sender">{getDisplayName(user)}</div>
-											)}
-											<div
-												className="message-text markdown-content"
-												dangerouslySetInnerHTML={{
-													__html: DOMPurify.sanitize(marked.parse(message.content) as string),
-												}}
-											/>
-											<div className="message-time">{formatTime(message.created_at)}</div>
+										{!isOwnMessage && (
+											<div className="message-sender">{getDisplayName(user)}</div>
+										)}
+										<MessageContentRenderer message={message} />
+										<div className="message-time">{formatTime(message.created_at)}</div>
 										</div>
 									</div>
 								);
 								})}
 							</div>
 							<div className="input-area">
+								<input
+									type="file"
+									ref={fileInputRef}
+									style={{ display: "none" }}
+									onChange={handleFileSelect}
+									accept="image/*,audio/*,video/*,.pdf,.doc,.docx,.txt"
+								/>
+								<button
+									onClick={() => fileInputRef.current?.click()}
+									className="attach-button"
+									disabled={connectionState !== "connected"}
+									title="发送文件"
+								>
+									📎
+								</button>
 								<input
 									type="text"
 									className="message-input"

@@ -5,6 +5,42 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-route
 import { useWebSocket } from "./hooks/useWebSocket";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
+// Parse message content
+function parseMessageContent(message) {
+    if (!message.content_type || message.content_type === "text") {
+        try {
+            return JSON.parse(message.content);
+        }
+        catch {
+            return { type: "text", text: message.content };
+        }
+    }
+    return JSON.parse(message.content);
+}
+// Message content renderer component
+function MessageContentRenderer({ message }) {
+    const content = parseMessageContent(message);
+    switch (content.type) {
+        case "text":
+            return (_jsx("div", { className: "message-text markdown-content", dangerouslySetInnerHTML: {
+                    __html: DOMPurify.sanitize(marked.parse(content.text)),
+                } }));
+        case "image":
+            return (_jsx("div", { className: "message-image", children: _jsx("img", { src: `data:${content.mime_type};base64,${content.data}`, alt: content.name || "图片", style: { maxWidth: "300px", borderRadius: "8px", cursor: "pointer" }, onClick: () => window.open(`data:${content.mime_type};base64,${content.data}`, "_blank") }) }));
+        case "audio":
+            return (_jsx("div", { className: "message-audio", children: _jsx("audio", { controls: true, src: `data:${content.mime_type};base64,${content.data}` }) }));
+        case "video":
+            return (_jsx("div", { className: "message-video", children: _jsx("video", { controls: true, src: `data:${content.mime_type};base64,${content.data}`, style: { maxWidth: "300px", borderRadius: "8px" } }) }));
+        case "location":
+            return (_jsxs("div", { className: "message-location", children: ["\uD83D\uDCCD ", content.address || `${content.latitude.toFixed(6)}, ${content.longitude.toFixed(6)}`] }));
+        case "card":
+            return (_jsxs("div", { className: "message-card", children: [_jsx("div", { className: "card-title", children: content.title }), content.description && _jsx("div", { className: "card-desc", children: content.description }), content.url && (_jsx("a", { href: content.url, target: "_blank", rel: "noopener noreferrer", children: "\u67E5\u770B\u8BE6\u60C5 \u2192" }))] }));
+        case "file":
+            return (_jsxs("div", { className: "message-file", children: ["\uD83D\uDCCE ", content.name || "文件"] }));
+        default:
+            return _jsx("div", { className: "message-text", children: message.content });
+    }
+}
 // Connection status indicator component
 function ConnectionStatus({ state, reconnectAttempt }) {
     const getStatusColor = () => {
@@ -85,6 +121,7 @@ function ChatPage() {
     const [showUserMenu, setShowUserMenu] = useState(false);
     const messagesContainerRef = useRef(null);
     const userMenuRef = useRef(null);
+    const fileInputRef = useRef(null);
     const navigate = useNavigate();
     const originalTitleRef = useRef("ChatV2");
     // Load session and user
@@ -263,15 +300,17 @@ function ChatPage() {
             console.error("加载消息失败:", err);
         }
     };
-    // Send message
+    // Send text message
     const handleSendMessage = async () => {
         if (!messageInput.trim() || !selectedRoom || !currentUser)
             return;
+        const contentObj = { type: "text", text: messageInput };
         const tempMessage = {
             id: `temp-${Date.now()}`,
             room_id: selectedRoom.id,
             user_id: currentUser.id,
-            content: messageInput,
+            content: JSON.stringify(contentObj),
+            content_type: "text",
             created_at: Date.now(),
         };
         setMessages((prev) => [...prev, tempMessage]);
@@ -285,7 +324,8 @@ function ChatPage() {
                 },
                 body: JSON.stringify({
                     room_id: selectedRoom.id,
-                    content: messageInput,
+                    content: JSON.stringify(contentObj),
+                    content_type: "text",
                 }),
             });
             const data = (await response.json());
@@ -300,6 +340,71 @@ function ChatPage() {
             setMessageInput(messageInput);
             console.error("发送消息失败:", err);
         }
+    };
+    // Handle file select
+    const handleFileSelect = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file || !selectedRoom || !currentUser)
+            return;
+        // Check file size (max 5MB)
+        if (file.size > 5 * 1024 * 1024) {
+            alert("文件大小不能超过 5MB");
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = async () => {
+            const base64 = reader.result.split(",")[1];
+            const mimeType = file.type;
+            let contentType = "file";
+            if (mimeType.startsWith("image/"))
+                contentType = "image";
+            else if (mimeType.startsWith("audio/"))
+                contentType = "audio";
+            else if (mimeType.startsWith("video/"))
+                contentType = "video";
+            const contentObj = {
+                type: contentType,
+                data: base64,
+                mime_type: mimeType,
+                name: file.name,
+            };
+            const tempMessage = {
+                id: `temp-${Date.now()}`,
+                room_id: selectedRoom.id,
+                user_id: currentUser.id,
+                content: JSON.stringify(contentObj),
+                content_type: contentType,
+                created_at: Date.now(),
+            };
+            setMessages((prev) => [...prev, tempMessage]);
+            try {
+                const response = await fetch("/api/messages", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${session?.id}`,
+                    },
+                    body: JSON.stringify({
+                        room_id: selectedRoom.id,
+                        content: JSON.stringify(contentObj),
+                        content_type: contentType,
+                    }),
+                });
+                const data = (await response.json());
+                if (!data.success) {
+                    setMessages((prev) => prev.filter((m) => m.id !== tempMessage.id));
+                    alert("发送文件失败: " + data.error);
+                }
+            }
+            catch (err) {
+                setMessages((prev) => prev.filter((m) => m.id !== tempMessage.id));
+                console.error("发送文件失败:", err);
+                alert("发送文件失败");
+            }
+        };
+        reader.readAsDataURL(file);
+        // Reset file input
+        e.target.value = "";
     };
     // Scroll to bottom when messages change
     useEffect(() => {
@@ -418,10 +523,8 @@ function ChatPage() {
                                             : currentUser.username }), _jsx(ConnectionStatus, { state: connectionState, reconnectAttempt: reconnectAttempt }), _jsx("div", { className: "menu-arrow", children: showUserMenu ? "▲" : "▼" })] }), showUserMenu && (_jsxs("div", { className: "user-menu-dropdown", children: [currentUser.role === "admin" && (_jsxs("button", { onClick: () => { setShowCreateUser(true); setShowUserMenu(false); }, children: [_jsx("span", { children: "\uD83D\uDC64" }), " \u521B\u5EFA\u7528\u6237"] })), _jsxs("button", { onClick: () => { setShowChangeNickname(true); setShowUserMenu(false); }, children: [_jsx("span", { children: "\u270F\uFE0F" }), " \u4FEE\u6539\u6635\u79F0"] }), _jsxs("button", { onClick: () => { setShowChangePassword(true); setShowUserMenu(false); }, children: [_jsx("span", { children: "\uD83D\uDD12" }), " \u4FEE\u6539\u5BC6\u7801"] }), _jsx("div", { className: "menu-divider" }), _jsxs("button", { onClick: () => { handleLogout(); setShowUserMenu(false); }, className: "logout-item", children: [_jsx("span", { children: "\uD83D\uDEAA" }), " \u9000\u51FA\u767B\u5F55"] })] }))] }), _jsxs("div", { className: "room-list", children: [_jsxs("div", { className: "room-list-header", children: [_jsx("span", { children: "\u804A\u5929" }), _jsxs("div", { className: "room-actions", children: [_jsx("button", { onClick: () => setShowUserList(true), className: "add-room-button", title: "\u65B0\u804A\u5929", children: "+" }), _jsx("button", { onClick: handleCreateBotRoom, className: "add-room-button", title: "AI\u52A9\u624B", children: "\uD83E\uDD16" })] })] }), rooms.map((room) => (_jsxs("div", { className: `room-item ${selectedRoom?.id === room.id ? "active" : ""}`, onClick: () => handleSelectRoom(room), children: [_jsx("div", { className: "room-avatar", children: room.avatar || (room.type === "bot" ? "🤖" : "💬") }), _jsxs("div", { className: "room-info", children: [_jsx("div", { className: "room-name", children: room.name }), _jsx("div", { className: "room-type", children: room.type === "bot" ? "AI助手" : room.type === "group" ? "群聊" : "私聊" })] }), unreadCounts.get(room.id) ? (_jsx("div", { className: "unread-badge", children: unreadCounts.get(room.id) })) : null, room.type === "bot" && (_jsx("button", { onClick: (e) => handleDeleteRoom(room.id, room.type, e), className: "delete-room-button", children: "\u00D7" }))] }, room.id)))] })] }), _jsx("div", { className: "chat-area", children: selectedRoom ? (_jsxs(_Fragment, { children: [_jsx("div", { className: "chat-header", children: _jsxs("div", { className: "chat-title", children: [_jsx("span", { className: "chat-avatar", children: selectedRoom.avatar || (selectedRoom.type === "bot" ? "🤖" : "💬") }), _jsx("span", { className: "chat-name", children: selectedRoom.name })] }) }), _jsx("div", { className: "messages-container", ref: messagesContainerRef, children: messages.map((message) => {
                                 const user = getUserById(message.user_id);
                                 const isOwnMessage = message.user_id === currentUser.id;
-                                return (_jsxs("div", { className: `message ${isOwnMessage ? "own" : "other"}`, children: [!isOwnMessage && (_jsx("div", { className: "message-avatar", children: user?.avatar || "👤" })), _jsxs("div", { className: "message-content", children: [!isOwnMessage && (_jsx("div", { className: "message-sender", children: getDisplayName(user) })), _jsx("div", { className: "message-text markdown-content", dangerouslySetInnerHTML: {
-                                                        __html: DOMPurify.sanitize(marked.parse(message.content)),
-                                                    } }), _jsx("div", { className: "message-time", children: formatTime(message.created_at) })] })] }, message.id));
-                            }) }), _jsxs("div", { className: "input-area", children: [_jsx("input", { type: "text", className: "message-input", placeholder: "\u8F93\u5165\u6D88\u606F...", value: messageInput, onChange: (e) => setMessageInput(e.target.value), onKeyPress: (e) => e.key === "Enter" && handleSendMessage(), disabled: connectionState !== "connected" }), _jsx("button", { onClick: handleSendMessage, className: "send-button", disabled: connectionState !== "connected", children: "\u53D1\u9001" })] })] })) : (_jsxs("div", { className: "empty-state", children: [_jsx("div", { className: "empty-icon", children: "\uD83D\uDCAC" }), _jsx("div", { className: "empty-text", children: "\u9009\u62E9\u4E00\u4E2A\u804A\u5929\u5F00\u59CB\u5BF9\u8BDD" })] })) }), showCreateUser && _jsx(CreateUserModal, { onClose: () => setShowCreateUser(false) }), showUserList && _jsx(UserListModal, { onClose: () => setShowUserList(false), onUserSelected: handleUserSelected }), showChangePassword && _jsx(ChangePasswordModal, { onClose: () => setShowChangePassword(false) }), showChangeNickname && (_jsx(ChangeNicknameModal, { onClose: () => setShowChangeNickname(false), currentNickname: currentUser?.nickname, onNicknameChanged: (nickname) => {
+                                return (_jsxs("div", { className: `message ${isOwnMessage ? "own" : "other"}`, children: [!isOwnMessage && (_jsx("div", { className: "message-avatar", children: user?.avatar || "👤" })), _jsxs("div", { className: "message-content", children: [!isOwnMessage && (_jsx("div", { className: "message-sender", children: getDisplayName(user) })), _jsx(MessageContentRenderer, { message: message }), _jsx("div", { className: "message-time", children: formatTime(message.created_at) })] })] }, message.id));
+                            }) }), _jsxs("div", { className: "input-area", children: [_jsx("input", { type: "file", ref: fileInputRef, style: { display: "none" }, onChange: handleFileSelect, accept: "image/*,audio/*,video/*,.pdf,.doc,.docx,.txt" }), _jsx("button", { onClick: () => fileInputRef.current?.click(), className: "attach-button", disabled: connectionState !== "connected", title: "\u53D1\u9001\u6587\u4EF6", children: "\uD83D\uDCCE" }), _jsx("input", { type: "text", className: "message-input", placeholder: "\u8F93\u5165\u6D88\u606F...", value: messageInput, onChange: (e) => setMessageInput(e.target.value), onKeyPress: (e) => e.key === "Enter" && handleSendMessage(), disabled: connectionState !== "connected" }), _jsx("button", { onClick: handleSendMessage, className: "send-button", disabled: connectionState !== "connected", children: "\u53D1\u9001" })] })] })) : (_jsxs("div", { className: "empty-state", children: [_jsx("div", { className: "empty-icon", children: "\uD83D\uDCAC" }), _jsx("div", { className: "empty-text", children: "\u9009\u62E9\u4E00\u4E2A\u804A\u5929\u5F00\u59CB\u5BF9\u8BDD" })] })) }), showCreateUser && _jsx(CreateUserModal, { onClose: () => setShowCreateUser(false) }), showUserList && _jsx(UserListModal, { onClose: () => setShowUserList(false), onUserSelected: handleUserSelected }), showChangePassword && _jsx(ChangePasswordModal, { onClose: () => setShowChangePassword(false) }), showChangeNickname && (_jsx(ChangeNicknameModal, { onClose: () => setShowChangeNickname(false), currentNickname: currentUser?.nickname, onNicknameChanged: (nickname) => {
                     if (currentUser) {
                         const updatedUser = { ...currentUser, nickname };
                         setCurrentUser(updatedUser);

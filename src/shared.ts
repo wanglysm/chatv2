@@ -27,12 +27,23 @@ export type RoomMember = {
 	joined_at: number;
 };
 
+// Message content types
+export type MessageContent =
+	| { type: "text"; text: string }
+	| { type: "image"; data: string; mime_type: string; name?: string; width?: number; height?: number }
+	| { type: "audio"; data: string; mime_type: string; duration?: number; name?: string }
+	| { type: "video"; data: string; mime_type: string; duration?: number; width?: number; height?: number; name?: string }
+	| { type: "file"; data: string; mime_type: string; name?: string; size?: number }
+	| { type: "location"; latitude: number; longitude: number; address?: string }
+	| { type: "card"; title: string; description?: string; url?: string; image?: string };
+
 // Message types
 export type Message = {
 	id: string;
 	room_id: string;
 	user_id: string;
 	content: string;
+	content_type: "text" | "image" | "audio" | "video" | "file" | "location" | "card";
 	created_at: number;
 	source?: "user" | "bot";
 	external_id?: string;
@@ -109,6 +120,7 @@ export type CreateRoomRequest = {
 export type SendMessageRequest = {
 	room_id: string;
 	content: string;
+	content_type?: "text" | "image" | "audio" | "video" | "file" | "location" | "card";
 };
 
 export type ChangePasswordRequest = {

@@ -62,6 +62,7 @@ export class ChatV2 extends Server<Env> {
 				room_id TEXT NOT NULL,
 				user_id TEXT NOT NULL,
 				content TEXT NOT NULL,
+				content_type TEXT DEFAULT 'text',
 				created_at INTEGER NOT NULL,
 				source TEXT DEFAULT 'user',
 				external_id TEXT,
@@ -70,6 +71,13 @@ export class ChatV2 extends Server<Env> {
 				FOREIGN KEY (user_id) REFERENCES users(id)
 			)
 		`);
+
+		// Migration: Add content_type column if it doesn't exist (for existing databases)
+		const tableInfo = this.ctx.storage.sql.exec(`PRAGMA table_info(messages)`).toArray();
+		const hasContentType = tableInfo.some((col) => col.name === 'content_type');
+		if (!hasContentType) {
+			this.ctx.storage.sql.exec(`ALTER TABLE messages ADD COLUMN content_type TEXT DEFAULT 'text'`);
+		}
 
 		// Room members table
 		this.ctx.storage.sql.exec(`
@@ -549,15 +557,21 @@ export class ChatV2 extends Server<Env> {
 		}
 
 		const body = (await request.json()) as SendMessageRequest;
-		const { room_id, content } = body;
+		const { room_id, content, content_type = "text" } = body;
 
 		const messageId = this.generateId();
 		const now = Date.now();
 
-		this.ctx.storage.sql.exec(`
-			INSERT INTO messages (id, room_id, user_id, content, created_at, source)
-			VALUES ('${messageId}', '${room_id}', '${userId}', '${content.replace(/'/g, "''")}', ${now}, 'user')
-		`);
+		this.ctx.storage.sql.exec(
+			`INSERT INTO messages (id, room_id, user_id, content, content_type, created_at, source) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			messageId,
+			room_id,
+			userId,
+			content,
+			content_type,
+			now,
+			'user'
+		);
 
 		const user = this.ctx.storage.sql.exec(`
 			SELECT id, username, nickname, role, avatar, created_at FROM users WHERE id = '${userId}'
@@ -571,6 +585,7 @@ export class ChatV2 extends Server<Env> {
 				room_id,
 				user_id: userId,
 				content,
+				content_type,
 				created_at: now,
 				source: "user",
 			},
@@ -915,8 +930,8 @@ export class ChatV2 extends Server<Env> {
 		const now = Date.now();
 
 		this.ctx.storage.sql.exec(`
-			INSERT INTO messages (id, room_id, user_id, content, created_at, source, external_id)
-			VALUES ('${messageId}', '${roomId}', 'bot', '${content.replace(/'/g, "''")}', ${now}, 'bot', '${externalId || ""}')
+			INSERT INTO messages (id, room_id, user_id, content, content_type, created_at, source, external_id)
+			VALUES ('${messageId}', '${roomId}', 'bot', '${content.replace(/'/g, "''")}', 'text', ${now}, 'bot', '${externalId || ""}')
 		`);
 
 		// Broadcast to room members
@@ -927,6 +942,7 @@ export class ChatV2 extends Server<Env> {
 				room_id: roomId,
 				user_id: "bot",
 				content,
+				content_type: "text",
 				created_at: now,
 				source: "bot",
 				external_id: externalId,
@@ -971,8 +987,8 @@ export class ChatV2 extends Server<Env> {
 		const now = Date.now();
 
 		this.ctx.storage.sql.exec(`
-			INSERT INTO messages (id, room_id, user_id, content, created_at, source)
-			VALUES ('${messageId}', '${room_id}', 'bot', '${content.replace(/'/g, "''")}', ${now}, 'bot')
+			INSERT INTO messages (id, room_id, user_id, content, content_type, created_at, source)
+			VALUES ('${messageId}', '${room_id}', 'bot', '${content.replace(/'/g, "''")}', 'text', ${now}, 'bot')
 		`);
 
 		// Broadcast to room members
@@ -983,6 +999,7 @@ export class ChatV2 extends Server<Env> {
 				room_id,
 				user_id: "bot",
 				content,
+				content_type: "text",
 				created_at: now,
 				source: "bot",
 			},
