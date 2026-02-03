@@ -1,0 +1,35 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"compatibility_date": "2025-10-08",
+	"main": "src/server/index.ts",
+	"name": "chatv2",
+	"migrations": [
+		{
+			"new_sqlite_classes": ["ChatV2"],
+			"tag": "v1"
+		}
+	],
+	"assets": {
+		"directory": "./public",
+		"binding": "ASSETS",
+		"not_found_handling": "single-page-application"
+	},
+	"build": {
+		"command": "esbuild src/client/index.tsx --bundle --splitting --format=esm --platform=browser --outdir=public/dist"
+	},
+	"durable_objects": {
+		"bindings": [
+			{
+				"class_name": "ChatV2",
+				"name": "ChatV2"
+			}
+		]
+	},
+	"observability": {
+		"enabled": true
+	},
+	"upload_source_maps": true,
+	"vars": {
+		"BOT_API_KEY": "your-bot-api-key-here"
+	}
+}

@@ -1,0 +1,32 @@
+{
+	"name": "chatv2",
+	"version": "2.0.0",
+	"description": "Real-time chat with WebSocket connection persistence and Bot API",
+	"cloudflare": {
+		"label": "Chat V2",
+		"products": ["Workers", "Durable Objects"],
+		"preview_icon_url": "https://imagedelivery.net/wSMYJvS3Xw-n339CbDyDIA/4554c09f-835e-45bc-b0a2-7c86e374ca00/public"
+	},
+	"dependencies": {
+		"nanoid": "5.1.6",
+		"partyserver": "0.0.75",
+		"partysocket": "1.1.6",
+		"react": "^18.0.0",
+		"react-dom": "^18.0.0",
+		"react-router": "^7.13.0"
+	},
+	"devDependencies": {
+		"@types/react": "^18.0.0",
+		"@types/react-dom": "^18.0.0",
+		"esbuild": "0.27.0",
+		"typescript": "5.9.3",
+		"wrangler": "^4.61.1"
+	},
+	"private": true,
+	"scripts": {
+		"cf-typegen": "wrangler types ./src/server/worker-configuration.d.ts",
+		"check": "tsc --project src/client && tsc --project src/server && wrangler deploy --dry-run",
+		"deploy": "wrangler deploy",
+		"dev": "wrangler dev"
+	}
+}

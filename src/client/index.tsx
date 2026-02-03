@@ -1,0 +1,900 @@
+import { createRoot } from "react-dom/client";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router";
+import { useWebSocket } from "./hooks/useWebSocket";
+import type { User, Room, Message, Session, WSMessage, APIResponse } from "../shared";
+
+// Connection status indicator component
+function ConnectionStatus({ state, reconnectAttempt }: { state: string; reconnectAttempt: number }) {
+	const getStatusColor = () => {
+		switch (state) {
+			case "connected":
+				return "#4caf50";
+			case "connecting":
+			case "reconnecting":
+				return "#ff9800";
+			case "disconnected":
+				return "#f44336";
+			default:
+				return "#9e9e9e";
+		}
+	};
+
+	const getStatusText = () => {
+		switch (state) {
+			case "connected":
+				return "在线";
+			case "connecting":
+				return "连接中...";
+			case "reconnecting":
+				return `重连中 (${reconnectAttempt})...`;
+			case "disconnected":
+				return "离线";
+			default:
+				return "未知";
+		}
+	};
+
+	return (
+		<div className="connection-status" style={{ color: getStatusColor() }}>
+			<span className="status-dot" style={{ backgroundColor: getStatusColor() }}></span>
+			{getStatusText()}
+		</div>
+	);
+}
+
+// Login Page
+function LoginPage() {
+	const [username, setUsername] = useState("");
+	const [password, setPassword] = useState("");
+	const [error, setError] = useState("");
+	const navigate = useNavigate();
+
+	const handleLogin = async (e: React.FormEvent) => {
+		e.preventDefault();
+		setError("");
+
+		try {
+			const response = await fetch("/api/login", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ username, password }),
+		});
+
+		const data = (await response.json()) as APIResponse<{ session: Session; user: User }>;
+
+			if (data.success && data.data) {
+			localStorage.setItem("session", JSON.stringify(data.data.session));
+			localStorage.setItem("user", JSON.stringify(data.data.user));
+			navigate("/chat");
+		} else {
+			setError(data.error || "登录失败");
+		}
+		} catch (err) {
+			setError("网络错误，请重试");
+		}
+	};
+
+	return (
+		<div className="login-container">
+			<div className="login-box">
+				<h1>登录 ChatV2</h1>
+				<form onSubmit={handleLogin}>
+					<div className="form-group">
+						<label>用户名</label>
+						<input
+							type="text"
+							value={username}
+							onChange={(e) => setUsername(e.target.value)}
+							placeholder="请输入用户名"
+							required
+						/>
+					</div>
+					<div className="form-group">
+						<label>密码</label>
+						<input
+							type="password"
+							value={password}
+							onChange={(e) => setPassword(e.target.value)}
+							placeholder="请输入密码"
+							required
+						/>
+					</div>
+					{error && <div className="error-message">{error}</div>}
+					<button type="submit" className="login-button">
+						登录
+					</button>
+				</form>
+				<div className="login-hint">
+					<p>默认管理员账号：admin / admin123</p>
+				</div>
+			</div>
+		</div>
+	);
+}
+
+// Chat Page
+function ChatPage() {
+	const [session, setSession] = useState<Session | null>(null);
+	const [currentUser, setCurrentUser] = useState<User | null>(null);
+	const [rooms, setRooms] = useState<Room[]>([]);
+	const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
+	const [messages, setMessages] = useState<Message[]>([]);
+	const [users, setUsers] = useState<User[]>([]);
+	const [messageInput, setMessageInput] = useState("");
+	const [unreadCounts, setUnreadCounts] = useState<Map<string, number>>(new Map());
+	const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
+	const [showCreateUser, setShowCreateUser] = useState(false);
+	const [showUserList, setShowUserList] = useState(false);
+	const [showChangePassword, setShowChangePassword] = useState(false);
+	const [showChangeNickname, setShowChangeNickname] = useState(false);
+	const [showUserMenu, setShowUserMenu] = useState(false);
+
+	const messagesContainerRef = useRef<HTMLDivElement>(null);
+	const userMenuRef = useRef<HTMLDivElement>(null);
+	const navigate = useNavigate();
+
+	// Load session and user
+	useEffect(() => {
+		const sessionData = localStorage.getItem("session");
+		const userData = localStorage.getItem("user");
+
+		if (!sessionData || !userData) {
+			navigate("/login");
+			return;
+		}
+
+		setSession(JSON.parse(sessionData));
+		setCurrentUser(JSON.parse(userData));
+	}, [navigate]);
+
+	// Handle incoming WebSocket messages
+	const handleWebSocketMessage = useCallback((message: WSMessage) => {
+		switch (message.type) {
+			case "new_message":
+				if (selectedRoom?.id === message.message.room_id) {
+					setMessages((prev) => {
+						// Check if message already exists
+						if (prev.some((m) => m.id === message.message.id)) {
+							return prev;
+						}
+						return [...prev, message.message];
+					});
+					// Add user if not exists
+					setUsers((prev) => {
+						if (prev.some((u) => u.id === message.user.id)) {
+							return prev;
+						}
+						return [...prev, message.user];
+					});
+				} else {
+					// Update unread count for other rooms
+					if (message.message.user_id !== currentUser?.id) {
+						setUnreadCounts((prev) => {
+							const newMap = new Map(prev);
+							newMap.set(message.message.room_id, (newMap.get(message.message.room_id) || 0) + 1);
+							return newMap;
+						});
+					}
+				}
+				break;
+
+			case "room_messages":
+				if (selectedRoom?.id === message.room_id) {
+					setMessages(message.messages);
+					setUsers(message.users);
+				}
+				break;
+
+			case "sync_response":
+				// Merge sync messages with existing
+				setMessages((prev) => {
+					const existingIds = new Set(prev.map((m) => m.id));
+					const newMessages = message.messages.filter((m) => !existingIds.has(m.id));
+					return [...prev, ...newMessages].sort((a, b) => a.created_at - b.created_at);
+				});
+				setUsers((prev) => {
+					const existingIds = new Set(prev.map((u) => u.id));
+					const newUsers = message.users.filter((u) => !existingIds.has(u.id));
+					return [...prev, ...newUsers];
+				});
+				break;
+
+			case "user_online":
+				setOnlineUsers((prev) => new Set([...prev, message.user_id]));
+				break;
+
+			case "user_offline":
+				setOnlineUsers((prev) => {
+					const newSet = new Set(prev);
+					newSet.delete(message.user_id);
+					return newSet;
+				});
+				break;
+		}
+	}, [selectedRoom, currentUser]);
+
+	// WebSocket hook
+	const { connectionState, reconnectAttempt, joinRoom, leaveRoom, syncMessages } = useWebSocket({
+		sessionId: session?.id || null,
+		onMessage: handleWebSocketMessage,
+		onConnect: () => {
+			// Sync messages after reconnection
+			const lastMessage = messages[messages.length - 1];
+			syncMessages(lastMessage?.id);
+		},
+	});
+
+	// Load rooms
+	const loadRooms = async () => {
+		try {
+			const sessionData = localStorage.getItem("session");
+			if (!sessionData) return;
+
+			const session = JSON.parse(sessionData);
+			const response = await fetch("/api/rooms", {
+				headers: { Authorization: `Bearer ${session.id}` },
+			});
+
+			const data = (await response.json()) as APIResponse<Room[]>;
+			if (data.success && data.data) {
+				setRooms(data.data);
+			}
+		} catch (err) {
+			console.error("加载聊天室失败:", err);
+		}
+	};
+
+	// Initial load
+	useEffect(() => {
+		if (session) {
+			loadRooms();
+		}
+	}, [session]);
+
+	// Handle room selection
+	const handleSelectRoom = (room: Room) => {
+		if (selectedRoom) {
+			leaveRoom(selectedRoom.id);
+		}
+
+		setSelectedRoom(room);
+		setUnreadCounts((prev) => {
+			const newMap = new Map(prev);
+			newMap.delete(room.id);
+			return newMap;
+		});
+
+		// Load messages via HTTP first
+		loadRoomMessages(room.id);
+
+		// Join room via WebSocket
+		joinRoom(room.id);
+	};
+
+	const loadRoomMessages = async (roomId: string) => {
+		try {
+			const response = await fetch(`/api/rooms/${roomId}`, {
+				headers: { Authorization: `Bearer ${session?.id}` },
+			});
+			const data = (await response.json()) as APIResponse<{ messages: Message[]; users: User[] }>;
+			if (data.success && data.data) {
+				setMessages(data.data.messages);
+				setUsers(data.data.users);
+			}
+		} catch (err) {
+			console.error("加载消息失败:", err);
+		}
+	};
+
+	// Send message
+	const handleSendMessage = async () => {
+		if (!messageInput.trim() || !selectedRoom || !currentUser) return;
+
+		const tempMessage: Message = {
+			id: `temp-${Date.now()}`,
+			room_id: selectedRoom.id,
+			user_id: currentUser.id,
+			content: messageInput,
+			created_at: Date.now(),
+		};
+
+		setMessages((prev) => [...prev, tempMessage]);
+		setMessageInput("");
+
+		try {
+			const response = await fetch("/api/messages", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: `Bearer ${session?.id}`,
+				},
+				body: JSON.stringify({
+					room_id: selectedRoom.id,
+					content: messageInput,
+				}),
+			});
+
+			const data = (await response.json()) as APIResponse<{ message_id: string }>;
+			if (!data.success) {
+				// Remove temp message on failure
+				setMessages((prev) => prev.filter((m) => m.id !== tempMessage.id));
+				setMessageInput(messageInput);
+			}
+		} catch (err) {
+			setMessages((prev) => prev.filter((m) => m.id !== tempMessage.id));
+			setMessageInput(messageInput);
+			console.error("发送消息失败:", err);
+		}
+	};
+
+	// Scroll to bottom when messages change
+	useEffect(() => {
+		if (messagesContainerRef.current) {
+			messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+		}
+	}, [messages]);
+
+	// Handle click outside user menu
+	useEffect(() => {
+		const handleClickOutside = (event: MouseEvent) => {
+			if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+				setShowUserMenu(false);
+			}
+		};
+		document.addEventListener("mousedown", handleClickOutside);
+		return () => document.removeEventListener("mousedown", handleClickOutside);
+	}, []);
+
+	const handleLogout = () => {
+		localStorage.removeItem("session");
+		localStorage.removeItem("user");
+		navigate("/login");
+	};
+
+	const handleCreateBotRoom = async () => {
+		if (!currentUser) return;
+
+		try {
+			const response = await fetch("/api/rooms", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: `Bearer ${session?.id}`,
+				},
+				body: JSON.stringify({
+					name: "AI助手",
+					type: "bot",
+					member_ids: [currentUser.id],
+				}),
+			});
+
+			const data = (await response.json()) as APIResponse<Room>;
+			if (data.success) {
+				loadRooms();
+			}
+		} catch (err) {
+			console.error("创建AI聊天室失败:", err);
+		}
+	};
+
+	const handleDeleteRoom = async (roomId: string, roomType: string, e: React.MouseEvent) => {
+		e.stopPropagation();
+
+		if (roomType !== "bot") return;
+		if (!confirm("确定要删除这个聊天室吗？")) return;
+
+		try {
+			const response = await fetch(`/api/rooms/${roomId}`, {
+				method: "DELETE",
+				headers: { Authorization: `Bearer ${session?.id}` },
+			});
+
+			const data = (await response.json()) as APIResponse;
+			if (data.success) {
+				if (selectedRoom?.id === roomId) {
+					setSelectedRoom(null);
+					setMessages([]);
+				}
+				loadRooms();
+			}
+		} catch (err) {
+			console.error("删除聊天室失败:", err);
+		}
+	};
+
+	const handleUserSelected = async (targetUserId: string) => {
+		setShowUserList(false);
+		if (!currentUser) return;
+
+		try {
+			const response = await fetch("/api/rooms", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: `Bearer ${session?.id}`,
+				},
+				body: JSON.stringify({
+					name: "Private Chat",
+					type: "private",
+					member_ids: [currentUser.id, targetUserId],
+				}),
+			});
+
+			const data = (await response.json()) as APIResponse<Room>;
+			if (data.success) {
+				await loadRooms();
+				if (data.data) {
+					handleSelectRoom(data.data);
+				}
+			}
+		} catch (err) {
+			console.error("创建聊天失败:", err);
+		}
+	};
+
+	const getUserById = (userId: string): User | undefined => {
+		return users.find((u) => u.id === userId);
+	};
+
+	const getDisplayName = (user: User | undefined): string => {
+		return user?.nickname || user?.username || "未知用户";
+	};
+
+	const formatTime = (timestamp: number) => {
+		const date = new Date(timestamp);
+		return date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+	};
+
+	if (!session || !currentUser) {
+		return <div>加载中...</div>;
+	}
+
+	return (
+		<div className="chat-container">
+			<div className="sidebar">
+				<div className="user-info" ref={userMenuRef}>
+					<div className="user-info-main" onClick={() => setShowUserMenu(!showUserMenu)}>
+						<div className="avatar">{currentUser.avatar || "👤"}</div>
+						<div className="username">
+							{currentUser.nickname
+								? `${currentUser.username} (${currentUser.nickname})`
+								: currentUser.username}
+						</div>
+						<ConnectionStatus state={connectionState} reconnectAttempt={reconnectAttempt} />
+						<div className="menu-arrow">{showUserMenu ? "▲" : "▼"}</div>
+					</div>
+					{showUserMenu && (
+						<div className="user-menu-dropdown">
+							{currentUser.role === "admin" && (
+								<button onClick={() => { setShowCreateUser(true); setShowUserMenu(false); }}>
+									<span>👤</span> 创建用户
+								</button>
+								)}
+							<button onClick={() => { setShowChangeNickname(true); setShowUserMenu(false); }}>
+								<span>✏️</span> 修改昵称
+							</button>
+							<button onClick={() => { setShowChangePassword(true); setShowUserMenu(false); }}>
+								<span>🔒</span> 修改密码
+							</button>
+							<div className="menu-divider"></div>
+							<button onClick={() => { handleLogout(); setShowUserMenu(false); }} className="logout-item">
+								<span>🚪</span> 退出登录
+							</button>
+						</div>
+					)}
+				</div>
+
+				<div className="room-list">
+					<div className="room-list-header">
+						<span>聊天</span>
+						<div className="room-actions">
+							<button onClick={() => setShowUserList(true)} className="add-room-button" title="新聊天">
+								+
+							</button>
+							<button onClick={handleCreateBotRoom} className="add-room-button" title="AI助手">
+								🤖
+							</button>
+						</div>
+					</div>
+					{rooms.map((room) => (
+						<div
+							key={room.id}
+							className={`room-item ${selectedRoom?.id === room.id ? "active" : ""}`}
+							onClick={() => handleSelectRoom(room)}
+						>
+							<div className="room-avatar">
+								{room.avatar || (room.type === "bot" ? "🤖" : "💬")}
+							</div>
+							<div className="room-info">
+								<div className="room-name">{room.name}</div>
+								<div className="room-type">
+									{room.type === "bot" ? "AI助手" : room.type === "group" ? "群聊" : "私聊"}
+								</div>
+							</div>
+							{unreadCounts.get(room.id) ? (
+								<div className="unread-badge">{unreadCounts.get(room.id)}</div>
+							) : null}
+							{room.type === "bot" && (
+								<button
+									onClick={(e) => handleDeleteRoom(room.id, room.type, e)}
+									className="delete-room-button"
+								>
+									×
+								</button>
+							)}
+						</div>
+					))}
+				</div>
+			</div>
+
+			<div className="chat-area">
+				{selectedRoom ? (
+					<>
+						<div className="chat-header">
+							<div className="chat-title">
+								<span className="chat-avatar">
+									{selectedRoom.avatar || (selectedRoom.type === "bot" ? "🤖" : "💬")}
+								</span>
+								<span className="chat-name">{selectedRoom.name}</span>
+							</div>
+						</div>
+						<div className="messages-container" ref={messagesContainerRef}>
+							{messages.map((message) => {
+								const user = getUserById(message.user_id);
+								const isOwnMessage = message.user_id === currentUser.id;
+								return (
+									<div key={message.id} className={`message ${isOwnMessage ? "own" : "other"}`}>
+										{!isOwnMessage && (
+											<div className="message-avatar">{user?.avatar || "👤"}</div>
+										)}
+										<div className="message-content">
+											{!isOwnMessage && (
+												<div className="message-sender">{getDisplayName(user)}</div>
+											)}
+											<div className="message-text">{message.content}</div>
+											<div className="message-time">{formatTime(message.created_at)}</div>
+										</div>
+									</div>
+								);
+								})}
+							</div>
+							<div className="input-area">
+								<input
+									type="text"
+									className="message-input"
+									placeholder="输入消息..."
+									value={messageInput}
+									onChange={(e) => setMessageInput(e.target.value)}
+									onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
+									disabled={connectionState !== "connected"}
+								/>
+								<button onClick={handleSendMessage} className="send-button" disabled={connectionState !== "connected"}>
+									发送
+								</button>
+							</div>
+						</>
+					) : (
+						<div className="empty-state">
+							<div className="empty-icon">💬</div>
+							<div className="empty-text">选择一个聊天开始对话</div>
+						</div>
+					)}
+				</div>
+
+			{showCreateUser && <CreateUserModal onClose={() => setShowCreateUser(false)} />}
+			{showUserList && <UserListModal onClose={() => setShowUserList(false)} onUserSelected={handleUserSelected} />}
+			{showChangePassword && <ChangePasswordModal onClose={() => setShowChangePassword(false)} />}
+			{showChangeNickname && (
+				<ChangeNicknameModal
+					onClose={() => setShowChangeNickname(false)}
+					currentNickname={currentUser?.nickname}
+					onNicknameChanged={(nickname) => {
+						if (currentUser) {
+							const updatedUser = { ...currentUser, nickname };
+							setCurrentUser(updatedUser);
+							localStorage.setItem("user", JSON.stringify(updatedUser));
+						}
+					}}
+				/>
+			)}
+		</div>
+	);
+}
+
+// Modals
+function CreateUserModal({ onClose }: { onClose: () => void }) {
+	const [username, setUsername] = useState("");
+	const [password, setPassword] = useState("");
+	const [error, setError] = useState("");
+	const [success, setSuccess] = useState(false);
+
+	const handleCreate = async (e: React.FormEvent) => {
+		e.preventDefault();
+		setError("");
+
+		if (username.length < 3) {
+			setError("用户名至少3位");
+			return;
+		}
+		if (password.length < 6) {
+			setError("密码至少6位");
+			return;
+		}
+
+		try {
+			const session = JSON.parse(localStorage.getItem("session") || "{}");
+			const response = await fetch("/api/users", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: `Bearer ${session.id}`,
+				},
+				body: JSON.stringify({ username, password }),
+			});
+
+			const data = (await response.json()) as APIResponse<User>;
+			if (data.success) {
+				setSuccess(true);
+				setTimeout(onClose, 1500);
+			} else {
+				setError(data.error || "创建失败");
+			}
+		} catch {
+			setError("网络错误");
+		}
+	};
+
+	return (
+		<div className="modal-overlay" onClick={onClose}>
+			<div className="modal-content" onClick={(e) => e.stopPropagation()}>
+				<h2>创建用户</h2>
+				{success ? (
+					<div className="success-message">创建成功！</div>
+				) : (
+					<form onSubmit={handleCreate}>
+						<div className="form-group">
+							<label>用户名</label>
+							<input type="text" value={username} onChange={(e) => setUsername(e.target.value)} required />
+						</div>
+						<div className="form-group">
+							<label>密码</label>
+							<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+						</div>
+						{error && <div className="error-message">{error}</div>}
+						<div className="modal-buttons">
+							<button type="button" onClick={onClose}>取消</button>
+							<button type="submit">创建</button>
+						</div>
+					</form>
+				)}
+			</div>
+		</div>
+	);
+}
+
+function UserListModal({ onClose, onUserSelected }: { onClose: () => void; onUserSelected: (userId: string) => void }) {
+	const [users, setUsers] = useState<User[]>([]);
+	const [loading, setLoading] = useState(true);
+
+	useEffect(() => {
+		const fetchUsers = async () => {
+			try {
+				const session = JSON.parse(localStorage.getItem("session") || "{}");
+				const response = await fetch("/api/users", {
+					headers: { Authorization: `Bearer ${session.id}` },
+				});
+				const data = (await response.json()) as APIResponse<User[]>;
+			if (data.success && data.data) {
+				setUsers(data.data);
+			}
+			} catch (err) {
+				console.error("加载用户失败:", err);
+			} finally {
+				setLoading(false);
+			}
+		};
+		fetchUsers();
+	}, []);
+
+	return (
+		<div className="modal-overlay" onClick={onClose}>
+			<div className="modal-content" onClick={(e) => e.stopPropagation()}>
+				<h2>发起新聊天</h2>
+				{loading ? (
+					<div>加载中...</div>
+				) : (
+					<div className="user-list">
+						{users.length === 0 ? (
+							<div className="empty-message">没有其他用户</div>
+						) : (
+							users.map((user) => (
+								<div key={user.id} className="user-list-item" onClick={() => onUserSelected(user.id)}>
+									<div className="avatar">{user.avatar || "👤"}</div>
+									<div className="user-info">
+										<div className="username">{user.nickname || user.username}</div>
+									</div>
+								</div>
+								))
+							)}
+						</div>
+					)}
+					<div className="modal-buttons">
+						<button onClick={onClose}>取消</button>
+					</div>
+				</div>
+			</div>
+		);
+	}
+
+function ChangePasswordModal({ onClose }: { onClose: () => void }) {
+	const [oldPassword, setOldPassword] = useState("");
+	const [newPassword, setNewPassword] = useState("");
+	const [confirmPassword, setConfirmPassword] = useState("");
+	const [error, setError] = useState("");
+	const [success, setSuccess] = useState(false);
+
+	const handleSubmit = async (e: React.FormEvent) => {
+		e.preventDefault();
+		setError("");
+
+		if (newPassword !== confirmPassword) {
+			setError("密码不匹配");
+			return;
+		}
+		if (newPassword.length < 6) {
+			setError("密码至少6位");
+			return;
+		}
+
+		try {
+			const session = JSON.parse(localStorage.getItem("session") || "{}");
+			const response = await fetch("/api/change-password", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: `Bearer ${session.id}`,
+				},
+				body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
+			});
+
+			const data = (await response.json()) as APIResponse;
+			if (data.success) {
+				setSuccess(true);
+				setTimeout(onClose, 1500);
+			} else {
+				setError(data.error || "修改失败");
+			}
+		} catch {
+			setError("网络错误");
+		}
+	};
+
+	return (
+		<div className="modal-overlay" onClick={onClose}>
+			<div className="modal-content" onClick={(e) => e.stopPropagation()}>
+				<h2>修改密码</h2>
+				{success ? (
+					<div className="success-message">修改成功！</div>
+				) : (
+					<form onSubmit={handleSubmit}>
+						<div className="form-group">
+							<label>旧密码</label>
+							<input type="password" value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} required />
+						</div>
+						<div className="form-group">
+							<label>新密码</label>
+							<input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required />
+						</div>
+						<div className="form-group">
+							<label>确认新密码</label>
+							<input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required />
+						</div>
+						{error && <div className="error-message">{error}</div>}
+						<div className="modal-buttons">
+							<button type="button" onClick={onClose}>取消</button>
+							<button type="submit">确认</button>
+						</div>
+					</form>
+				)}
+			</div>
+		</div>
+	);
+}
+
+function ChangeNicknameModal({
+	onClose,
+	currentNickname,
+	onNicknameChanged,
+}: {
+	onClose: () => void;
+	currentNickname?: string;
+	onNicknameChanged?: (nickname: string) => void;
+}) {
+	const [nickname, setNickname] = useState(currentNickname || "");
+	const [error, setError] = useState("");
+	const [success, setSuccess] = useState(false);
+
+	const handleSubmit = async (e: React.FormEvent) => {
+		e.preventDefault();
+		setError("");
+
+		if (nickname.length < 1) {
+			setError("昵称不能为空");
+			return;
+		}
+		if (nickname.length > 20) {
+			setError("昵称不能超过20字符");
+			return;
+		}
+
+		try {
+			const session = JSON.parse(localStorage.getItem("session") || "{}");
+			const response = await fetch("/api/change-nickname", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: `Bearer ${session.id}`,
+				},
+				body: JSON.stringify({ nickname }),
+			});
+
+			const data = (await response.json()) as APIResponse;
+			if (data.success) {
+				setSuccess(true);
+				onNicknameChanged?.(nickname);
+				setTimeout(onClose, 1500);
+			} else {
+				setError(data.error || "修改失败");
+			}
+		} catch {
+			setError("网络错误");
+		}
+	};
+
+	return (
+		<div className="modal-overlay" onClick={onClose}>
+			<div className="modal-content" onClick={(e) => e.stopPropagation()}>
+				<h2>修改昵称</h2>
+				{success ? (
+					<div className="success-message">修改成功！</div>
+				) : (
+					<form onSubmit={handleSubmit}>
+						<div className="form-group">
+							<label>昵称</label>
+							<input
+								type="text"
+								value={nickname}
+								onChange={(e) => setNickname(e.target.value)}
+								placeholder="1-20字符"
+								maxLength={20}
+								required
+							/>
+						</div>
+						{error && <div className="error-message">{error}</div>}
+						<div className="modal-buttons">
+							<button type="button" onClick={onClose}>取消</button>
+							<button type="submit">确认</button>
+						</div>
+					</form>
+				)}
+			</div>
+		</div>
+	);
+}
+
+// App
+function App() {
+	return (
+		<BrowserRouter>
+			<Routes>
+				<Route path="/" element={<Navigate to="/login" />} />
+				<Route path="/login" element={<LoginPage />} />
+				<Route path="/chat" element={<ChatPage />} />
+				<Route path="*" element={<Navigate to="/login" />} />
+			</Routes>
+		</BrowserRouter>
+	);
+}
+
+createRoot(document.getElementById("root")!).render(<App />);
