@@ -320,10 +320,34 @@ function ChatPage() {
 
 			case "room_messages":
 				if (selectedRoom?.id === message.room_id) {
-					setMessages(message.messages);
-					setUsers(message.users);
-					// Save to local IndexedDB
-					chatDB.saveRoomData(message.room_id, message.messages, message.users);
+					// Get local data first to preserve history
+					chatDB.getRoomData(message.room_id).then((localData) => {
+						const localMsgs = localData?.messages || [];
+						const serverMsgs = message.messages;
+						const serverUsers = message.users;
+
+						// Server messages are authoritative, but local may have older history
+						const serverMsgIds = new Set(serverMsgs.map((m) => m.id));
+						const localOnlyMsgs = localMsgs.filter((m) => !serverMsgIds.has(m.id));
+
+						// Merge: server messages + local-only older messages
+						const mergedMessages = [...serverMsgs, ...localOnlyMsgs].sort(
+							(a, b) => a.created_at - b.created_at
+						);
+
+						// Merge users
+						const localUsers = localData?.users || [];
+						const userMap = new Map<string, User>();
+						localUsers.forEach((u) => userMap.set(u.id, u));
+						serverUsers.forEach((u) => userMap.set(u.id, u));
+						const mergedUsers = Array.from(userMap.values());
+
+						setMessages(mergedMessages);
+						setUsers(mergedUsers);
+
+						// Save merged data to local IndexedDB
+						chatDB.saveRoomData(message.room_id, mergedMessages, mergedUsers);
+					});
 				}
 				break;
 
@@ -451,18 +475,19 @@ function ChatPage() {
 			});
 			const data = (await response.json()) as APIResponse<{ messages: Message[]; users: User[] }>;
 			if (data.success && data.data) {
-				// Merge server messages with local messages
-				// Server may have deleted some messages, but local still has them
 				const localMsgs = localData?.messages || [];
 				const serverMsgs = data.data.messages;
 				
-				// Create a map of all messages by ID
-				const messageMap = new Map<string, Message>();
-				localMsgs.forEach(msg => messageMap.set(msg.id, msg));
-				serverMsgs.forEach(msg => messageMap.set(msg.id, msg));
+				// Server messages are authoritative - they reflect the current state
+				// including deletions. Use server messages as base.
+				const serverMsgIds = new Set(serverMsgs.map(m => m.id));
 				
-				// Convert back to array and sort by time
-				const mergedMessages = Array.from(messageMap.values()).sort((a, b) => a.created_at - b.created_at);
+				// Find local messages that are not on server (could be unsynced or deleted)
+				const localOnlyMsgs = localMsgs.filter(m => !serverMsgIds.has(m.id));
+				
+				// Combine: server messages + local-only messages
+				// Sort by created_at to maintain order
+				const mergedMessages = [...serverMsgs, ...localOnlyMsgs].sort((a, b) => a.created_at - b.created_at);
 				
 				// Merge users
 				const localUsers = localData?.users || [];
