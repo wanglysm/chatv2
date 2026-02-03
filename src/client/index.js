@@ -249,8 +249,8 @@ function ChatPage() {
                 setRooms(data.data);
             }
         }
-        catch (err) {
-            console.error("加载聊天室失败:", err);
+        catch {
+            // Ignore load rooms error
         }
     };
     // Initial load
@@ -296,8 +296,8 @@ function ChatPage() {
                 setUsers(data.data.users);
             }
         }
-        catch (err) {
-            console.error("加载消息失败:", err);
+        catch {
+            // Ignore load messages error
         }
     };
     // Send text message
@@ -335,10 +335,9 @@ function ChatPage() {
                 setMessageInput(messageInput);
             }
         }
-        catch (err) {
+        catch {
             setMessages((prev) => prev.filter((m) => m.id !== tempMessage.id));
             setMessageInput(messageInput);
-            console.error("发送消息失败:", err);
         }
     };
     // Handle file select
@@ -396,9 +395,8 @@ function ChatPage() {
                     alert("发送文件失败: " + data.error);
                 }
             }
-            catch (err) {
+            catch {
                 setMessages((prev) => prev.filter((m) => m.id !== tempMessage.id));
-                console.error("发送文件失败:", err);
                 alert("发送文件失败");
             }
         };
@@ -448,8 +446,8 @@ function ChatPage() {
                 loadRooms();
             }
         }
-        catch (err) {
-            console.error("创建AI聊天室失败:", err);
+        catch {
+            // Ignore create bot room error
         }
     };
     const handleDeleteRoom = async (roomId, roomType, e) => {
@@ -472,8 +470,8 @@ function ChatPage() {
                 loadRooms();
             }
         }
-        catch (err) {
-            console.error("删除聊天室失败:", err);
+        catch {
+            // Ignore delete room error
         }
     };
     const handleUserSelected = async (targetUserId) => {
@@ -501,8 +499,8 @@ function ChatPage() {
                 }
             }
         }
-        catch (err) {
-            console.error("创建聊天失败:", err);
+        catch {
+            // Ignore create chat error
         }
     };
     const getUserById = (userId) => {
@@ -589,8 +587,8 @@ function UserListModal({ onClose, onUserSelected }) {
                     setUsers(data.data);
                 }
             }
-            catch (err) {
-                console.error("加载用户失败:", err);
+            catch {
+                // Ignore load users error
             }
             finally {
                 setLoading(false);

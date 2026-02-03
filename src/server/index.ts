@@ -932,14 +932,11 @@ export class ChatV2 extends Server<Env> {
 	handleMessageAck(connection: Connection, messageId: string, status: "delivered" | "read") {
 		const attachment = connection.deserializeAttachment() as ConnectionAttachment | null;
 		if (!attachment || attachment.type !== "user") {
-			console.log(`[ACK] Invalid attachment: ${attachment?.type}`);
 			return;
 		}
 
 		const userId = attachment.userId;
 		const now = Date.now();
-
-		console.log(`[ACK] Received ack from user ${userId} for message ${messageId}`);
 
 		// Record this user's acknowledgment
 		// Check if already acked first
@@ -950,15 +947,12 @@ export class ChatV2 extends Server<Env> {
 		).toArray();
 		
 		if (existingAck.length === 0) {
-			console.log(`[ACK] Recording new ack for message ${messageId} from user ${userId}`);
 			this.ctx.storage.sql.exec(
 				`INSERT INTO message_acks (message_id, user_id, acked_at) VALUES (?, ?, ?)`,
 				messageId,
 				userId,
 				now
 			);
-		} else {
-			console.log(`[ACK] Already acked: message ${messageId} from user ${userId}`);
 		}
 
 		// Get message info
@@ -968,11 +962,8 @@ export class ChatV2 extends Server<Env> {
 		).toArray()[0] as { room_id: string; user_id: string } | undefined;
 
 		if (!messageResult) {
-			console.log(`[ACK] Message ${messageId} not found in database`);
 			return;
 		}
-
-		console.log(`[ACK] Message ${messageId} in room ${messageResult.room_id}, sent by ${messageResult.user_id}`);
 
 		// Get all room members except sender
 		const members = this.ctx.storage.sql.exec(
@@ -980,8 +971,6 @@ export class ChatV2 extends Server<Env> {
 			messageResult.room_id,
 			messageResult.user_id
 		).toArray() as { user_id: string }[];
-
-		console.log(`[ACK] Room members (excluding sender): ${members.map(m => m.user_id).join(', ')}`);
 
 		// Get all acks for this message
 		const acks = this.ctx.storage.sql.exec(
@@ -992,30 +981,25 @@ export class ChatV2 extends Server<Env> {
 		// Filter out acks from the sender (sender shouldn't ack their own message)
 		const validAcks = acks.filter(a => a.user_id !== messageResult.user_id);
 		const ackedUserIds = new Set(validAcks.map(a => a.user_id));
-		console.log(`[ACK] Acks recorded: ${Array.from(ackedUserIds).join(', ')} (filtered out sender acks)`);
 
 		// Check if all members have acked
 		const allAcked = members.every(m => ackedUserIds.has(m.user_id));
-		console.log(`[ACK] All acked: ${allAcked} (need ${members.length}, have ${ackedUserIds.size})`);
 
 		if (allAcked) {
-			console.log(`[ACK] Deleting message ${messageId} - all recipients have acked`);
 			try {
 				// Clean up acks first (due to foreign key constraint)
 				this.ctx.storage.sql.exec(
 					`DELETE FROM message_acks WHERE message_id = ?`,
 					messageId
 				);
-				console.log(`[ACK] Acks cleaned up for message ${messageId}`);
 				
 				// Then delete the message
 				this.ctx.storage.sql.exec(
 					`DELETE FROM messages WHERE id = ?`,
 					messageId
 				);
-				console.log(`[ACK] Message ${messageId} deleted from messages table`);
-			} catch (e) {
-				console.error(`[ACK] Error deleting message ${messageId}:`, e);
+			} catch {
+				// Ignore delete errors
 			}
 		}
 	}
