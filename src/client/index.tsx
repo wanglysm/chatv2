@@ -5,6 +5,7 @@ import { useWebSocket } from "./hooks/useWebSocket";
 import type { User, Room, Message, Session, WSMessage, APIResponse, MessageContent } from "../shared";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
+import { chatDB } from "./db";
 
 // Parse message content
 function parseMessageContent(message: Message): MessageContent {
@@ -241,6 +242,9 @@ function ChatPage() {
 		setCurrentUser(JSON.parse(userData));
 	}, [navigate]);
 
+	// Track pending acknowledgments - messages that need to be acked when room is opened
+	const pendingAcksRef = useRef<Set<string>>(new Set());
+
 	// Handle incoming WebSocket messages
 	const handleWebSocketMessage = useCallback((message: WSMessage) => {
 		switch (message.type) {
@@ -261,7 +265,15 @@ function ChatPage() {
 					return prevRooms;
 				});
 
+				// Save message to local IndexedDB
+				chatDB.addMessage(message.message.room_id, message.message, message.user);
+
 				if (selectedRoom?.id === message.message.room_id) {
+					// User is viewing this room, send ack immediately (but not for own messages)
+					if (message.message.user_id !== currentUser?.id) {
+						ackMessage(message.message.id, "delivered");
+					}
+
 					setMessages((prev) => {
 						// Check if message already exists (including temp messages from current user)
 						const existingIndex = prev.findIndex((m) => m.id === message.message.id);
@@ -291,8 +303,9 @@ function ChatPage() {
 						return [...prev, message.user];
 					});
 				} else {
-					// Update unread count for other rooms (including new rooms)
+					// User is not viewing this room, add to pending acks
 					if (message.message.user_id !== currentUser?.id) {
+						pendingAcksRef.current.add(message.message.id);
 						setUnreadCounts((prev) => {
 							const newMap = new Map(prev);
 							newMap.set(message.message.room_id, (newMap.get(message.message.room_id) || 0) + 1);
@@ -307,6 +320,8 @@ function ChatPage() {
 				if (selectedRoom?.id === message.room_id) {
 					setMessages(message.messages);
 					setUsers(message.users);
+					// Save to local IndexedDB
+					chatDB.saveRoomData(message.room_id, message.messages, message.users);
 				}
 				break;
 
@@ -322,6 +337,10 @@ function ChatPage() {
 					const newUsers = message.users.filter((u) => !existingIds.has(u.id));
 					return [...prev, ...newUsers];
 				});
+				// Save synced messages to local IndexedDB
+				if (selectedRoom && message.messages.length > 0) {
+					chatDB.saveRoomData(selectedRoom.id, message.messages, message.users);
+				}
 				break;
 
 			case "user_online":
@@ -339,7 +358,7 @@ function ChatPage() {
 	}, [selectedRoom, currentUser]);
 
 	// WebSocket hook
-	const { connectionState, reconnectAttempt, joinRoom, leaveRoom, syncMessages } = useWebSocket({
+	const { connectionState, reconnectAttempt, joinRoom, leaveRoom, syncMessages, ackMessage } = useWebSocket({
 		sessionId: session?.id || null,
 		onMessage: handleWebSocketMessage,
 		onConnect: () => {
@@ -406,18 +425,71 @@ function ChatPage() {
 		joinRoom(room.id);
 	};
 
+	// Track loading state to prevent duplicate calls
+	const loadingRoomsRef = useRef<Set<string>>(new Set());
+
 	const loadRoomMessages = async (roomId: string) => {
+		// Prevent duplicate calls for the same room
+		if (loadingRoomsRef.current.has(roomId)) {
+			return;
+		}
+		loadingRoomsRef.current.add(roomId);
+
 		try {
+			// First, try to load from local IndexedDB for instant display
+			const localData = await chatDB.getRoomData(roomId);
+			if (localData) {
+				setMessages(localData.messages);
+				setUsers(localData.users);
+			}
+
+			// Then fetch from server to get new messages
 			const response = await fetch(`/api/rooms/${roomId}`, {
 				headers: { Authorization: `Bearer ${session?.id}` },
 			});
 			const data = (await response.json()) as APIResponse<{ messages: Message[]; users: User[] }>;
 			if (data.success && data.data) {
-				setMessages(data.data.messages);
-				setUsers(data.data.users);
+				// Merge server messages with local messages
+				// Server may have deleted some messages, but local still has them
+				const localMsgs = localData?.messages || [];
+				const serverMsgs = data.data.messages;
+				
+				// Create a map of all messages by ID
+				const messageMap = new Map<string, Message>();
+				localMsgs.forEach(msg => messageMap.set(msg.id, msg));
+				serverMsgs.forEach(msg => messageMap.set(msg.id, msg));
+				
+				// Convert back to array and sort by time
+				const mergedMessages = Array.from(messageMap.values()).sort((a, b) => a.created_at - b.created_at);
+				
+				// Merge users
+				const localUsers = localData?.users || [];
+				const serverUsers = data.data.users;
+				const userMap = new Map<string, User>();
+				localUsers.forEach(u => userMap.set(u.id, u));
+				serverUsers.forEach(u => userMap.set(u.id, u));
+				const mergedUsers = Array.from(userMap.values());
+				
+				setMessages(mergedMessages);
+				setUsers(mergedUsers);
+				
+				// Save merged data to local IndexedDB
+				await chatDB.saveRoomData(roomId, mergedMessages, mergedUsers);
+
+				// After messages are fully loaded and saved, send pending acknowledgments
+				// This ensures large files are completely received before server deletes them
+				serverMsgs.forEach(msg => {
+					// Only ack messages from others, not own messages
+					if (msg.user_id !== currentUser?.id && pendingAcksRef.current.has(msg.id)) {
+						ackMessage(msg.id, "delivered");
+						pendingAcksRef.current.delete(msg.id);
+					}
+				});
 			}
 		} catch (err) {
 			console.error("加载消息失败:", err);
+		} finally {
+			loadingRoomsRef.current.delete(roomId);
 		}
 	};
 
@@ -470,9 +542,10 @@ function ChatPage() {
 		const file = e.target.files?.[0];
 		if (!file || !selectedRoom || !currentUser) return;
 
-		// Check file size (max 5MB)
-		if (file.size > 5 * 1024 * 1024) {
-			alert("文件大小不能超过 5MB");
+		// Check file size (max 500KB to avoid SQLITE_TOOBIG after base64 encoding)
+		// Base64 increases size by ~33%, so 500KB -> ~670KB
+		if (file.size > 500 * 1024) {
+			alert("文件大小不能超过 500KB");
 			return;
 		}
 

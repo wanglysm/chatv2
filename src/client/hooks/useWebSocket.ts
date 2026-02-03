@@ -23,6 +23,7 @@ interface UseWebSocketReturn {
 	leaveRoom: (roomId: string) => void;
 	sendMessage: (message: Omit<WSMessage, "type"> & { type: string }) => void;
 	syncMessages: (lastMessageId?: string) => void;
+	ackMessage: (messageId: string, status: "delivered" | "read") => void;
 }
 
 export function useWebSocket({
@@ -219,6 +220,33 @@ export function useWebSocket({
 		}
 	}, []);
 
+	// Track pending acks that need to be sent when connection is ready
+	const pendingAcksRef = useRef<Array<{ messageId: string; status: "delivered" | "read" }>>([]);
+
+	const ackMessage = useCallback((messageId: string, status: "delivered" | "read") => {
+		if (socketRef.current?.readyState === WebSocket.OPEN) {
+			socketRef.current.send(JSON.stringify({
+				type: "message_ack",
+				message_id: messageId,
+				status,
+			}));
+		} else {
+			// Queue ack to be sent when connection is ready
+			pendingAcksRef.current.push({ messageId, status });
+		}
+	}, []);
+
+	// Send pending acks when connection opens
+	useEffect(() => {
+		if (connectionState === "connected" && pendingAcksRef.current.length > 0) {
+			const pending = [...pendingAcksRef.current];
+			pendingAcksRef.current = [];
+			pending.forEach(({ messageId, status }) => {
+				ackMessage(messageId, status);
+			});
+		}
+	}, [connectionState, ackMessage]);
+
 	return {
 		socket: socketRef.current,
 		connectionState,
@@ -227,5 +255,6 @@ export function useWebSocket({
 		leaveRoom,
 		sendMessage,
 		syncMessages,
+		ackMessage,
 	};
 }

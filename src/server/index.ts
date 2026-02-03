@@ -21,6 +21,8 @@ import type {
 
 const HEARTBEAT_INTERVAL = 30000; // 30 seconds
 const HEARTBEAT_TIMEOUT = 60000; // 60 seconds
+const MESSAGE_CLEANUP_INTERVAL = 60 * 60 * 1000; // 1 hour
+const MESSAGE_MAX_AGE = 24 * 60 * 60 * 1000; // 24 hours
 
 export class ChatV2 extends Server<Env> {
 	static options = { hibernate: true };
@@ -28,6 +30,7 @@ export class ChatV2 extends Server<Env> {
 	onStart() {
 		this.initializeDatabase();
 		this.startHeartbeatCheck();
+		this.startMessageCleanup();
 	}
 
 	initializeDatabase() {
@@ -78,6 +81,17 @@ export class ChatV2 extends Server<Env> {
 		if (!hasContentType) {
 			this.ctx.storage.sql.exec(`ALTER TABLE messages ADD COLUMN content_type TEXT DEFAULT 'text'`);
 		}
+
+		// Message acknowledgments table - tracks which users have acked which messages
+		this.ctx.storage.sql.exec(`
+			CREATE TABLE IF NOT EXISTS message_acks (
+				message_id TEXT NOT NULL,
+				user_id TEXT NOT NULL,
+				acked_at INTEGER NOT NULL,
+				PRIMARY KEY (message_id, user_id),
+				FOREIGN KEY (message_id) REFERENCES messages(id)
+			)
+		`);
 
 		// Room members table
 		this.ctx.storage.sql.exec(`
@@ -180,6 +194,22 @@ export class ChatV2 extends Server<Env> {
 				}
 			}
 		}, HEARTBEAT_INTERVAL);
+	}
+
+	startMessageCleanup() {
+		setInterval(() => {
+			const cutoffTime = Date.now() - MESSAGE_MAX_AGE;
+			// Delete old messages
+			this.ctx.storage.sql.exec(
+				`DELETE FROM messages WHERE created_at < ?`,
+				cutoffTime
+			);
+			// Clean up orphaned acks (for messages that no longer exist)
+			this.ctx.storage.sql.exec(`
+				DELETE FROM message_acks 
+				WHERE message_id NOT IN (SELECT id FROM messages)
+			`);
+		}, MESSAGE_CLEANUP_INTERVAL);
 	}
 
 	// HTTP API handlers
@@ -559,6 +589,14 @@ export class ChatV2 extends Server<Env> {
 		const body = (await request.json()) as SendMessageRequest;
 		const { room_id, content, content_type = "text" } = body;
 
+		// Check content size to avoid SQLITE_TOOBIG (limit to ~1MB)
+		if (content.length > 1024 * 1024) {
+			return new Response(
+				JSON.stringify({ success: false, error: "Message too large" } as APIResponse),
+				{ status: 413, headers: { "Content-Type": "application/json" } }
+			);
+		}
+
 		const messageId = this.generateId();
 		const now = Date.now();
 
@@ -892,9 +930,94 @@ export class ChatV2 extends Server<Env> {
 	}
 
 	handleMessageAck(connection: Connection, messageId: string, status: "delivered" | "read") {
-		this.ctx.storage.sql.exec(`
-			UPDATE messages SET acknowledged = 1 WHERE id = '${messageId}'
-		`);
+		const attachment = connection.deserializeAttachment() as ConnectionAttachment | null;
+		if (!attachment || attachment.type !== "user") {
+			console.log(`[ACK] Invalid attachment: ${attachment?.type}`);
+			return;
+		}
+
+		const userId = attachment.userId;
+		const now = Date.now();
+
+		console.log(`[ACK] Received ack from user ${userId} for message ${messageId}`);
+
+		// Record this user's acknowledgment
+		// Check if already acked first
+		const existingAck = this.ctx.storage.sql.exec(
+			`SELECT 1 FROM message_acks WHERE message_id = ? AND user_id = ?`,
+			messageId,
+			userId
+		).toArray();
+		
+		if (existingAck.length === 0) {
+			console.log(`[ACK] Recording new ack for message ${messageId} from user ${userId}`);
+			this.ctx.storage.sql.exec(
+				`INSERT INTO message_acks (message_id, user_id, acked_at) VALUES (?, ?, ?)`,
+				messageId,
+				userId,
+				now
+			);
+		} else {
+			console.log(`[ACK] Already acked: message ${messageId} from user ${userId}`);
+		}
+
+		// Get message info
+		const messageResult = this.ctx.storage.sql.exec(
+			`SELECT room_id, user_id FROM messages WHERE id = ?`,
+			messageId
+		).toArray()[0] as { room_id: string; user_id: string } | undefined;
+
+		if (!messageResult) {
+			console.log(`[ACK] Message ${messageId} not found in database`);
+			return;
+		}
+
+		console.log(`[ACK] Message ${messageId} in room ${messageResult.room_id}, sent by ${messageResult.user_id}`);
+
+		// Get all room members except sender
+		const members = this.ctx.storage.sql.exec(
+			`SELECT user_id FROM room_members WHERE room_id = ? AND user_id != ?`,
+			messageResult.room_id,
+			messageResult.user_id
+		).toArray() as { user_id: string }[];
+
+		console.log(`[ACK] Room members (excluding sender): ${members.map(m => m.user_id).join(', ')}`);
+
+		// Get all acks for this message
+		const acks = this.ctx.storage.sql.exec(
+			`SELECT user_id FROM message_acks WHERE message_id = ?`,
+			messageId
+		).toArray() as { user_id: string }[];
+
+		// Filter out acks from the sender (sender shouldn't ack their own message)
+		const validAcks = acks.filter(a => a.user_id !== messageResult.user_id);
+		const ackedUserIds = new Set(validAcks.map(a => a.user_id));
+		console.log(`[ACK] Acks recorded: ${Array.from(ackedUserIds).join(', ')} (filtered out sender acks)`);
+
+		// Check if all members have acked
+		const allAcked = members.every(m => ackedUserIds.has(m.user_id));
+		console.log(`[ACK] All acked: ${allAcked} (need ${members.length}, have ${ackedUserIds.size})`);
+
+		if (allAcked) {
+			console.log(`[ACK] Deleting message ${messageId} - all recipients have acked`);
+			try {
+				// Clean up acks first (due to foreign key constraint)
+				this.ctx.storage.sql.exec(
+					`DELETE FROM message_acks WHERE message_id = ?`,
+					messageId
+				);
+				console.log(`[ACK] Acks cleaned up for message ${messageId}`);
+				
+				// Then delete the message
+				this.ctx.storage.sql.exec(
+					`DELETE FROM messages WHERE id = ?`,
+					messageId
+				);
+				console.log(`[ACK] Message ${messageId} deleted from messages table`);
+			} catch (e) {
+				console.error(`[ACK] Error deleting message ${messageId}:`, e);
+			}
+		}
 	}
 
 	// Bot handlers
