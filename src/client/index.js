@@ -101,9 +101,20 @@ function ChatPage() {
             case "new_message":
                 if (selectedRoom?.id === message.message.room_id) {
                     setMessages((prev) => {
-                        // Check if message already exists
-                        if (prev.some((m) => m.id === message.message.id)) {
+                        // Check if message already exists (including temp messages from current user)
+                        const existingIndex = prev.findIndex((m) => m.id === message.message.id);
+                        if (existingIndex !== -1) {
                             return prev;
+                        }
+                        // Check if there's a temp message from the same user with similar content
+                        const tempIndex = prev.findIndex((m) => m.id.startsWith("temp-") &&
+                            m.user_id === message.message.user_id &&
+                            m.content === message.message.content);
+                        if (tempIndex !== -1) {
+                            // Replace temp message with real message
+                            const newMessages = [...prev];
+                            newMessages[tempIndex] = message.message;
+                            return newMessages;
                         }
                         return [...prev, message.message];
                     });

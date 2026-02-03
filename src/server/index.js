@@ -555,10 +555,10 @@ export class ChatV2 extends Server {
     }
     handleBotAuth(connection, apiKey) {
         console.log(`[Auth] Bot auth attempt`);
-        const config = this.ctx.storage.sql.exec(`
-			SELECT * FROM bot_config WHERE api_key = '${apiKey}' AND enabled = 1
-		`).toArray();
-        if (config.length === 0) {
+        // Check against environment variable
+        const validApiKey = this.env.BOT_API_KEY || "default-bot-api-key";
+        if (apiKey !== validApiKey) {
+            console.log(`[Auth] Invalid API key: ${apiKey.substring(0, 10)}...`);
             connection.send(JSON.stringify({ type: "auth_error", message: "Invalid API key" }));
             connection.close();
             return;
@@ -569,6 +569,7 @@ export class ChatV2 extends Server {
             subscribedRooms: [],
             lastPing: Date.now(),
         });
+        console.log(`[Auth] Bot authenticated successfully`);
         connection.send(JSON.stringify({ type: "auth_success" }));
     }
     handlePing(connection, timestamp) {
@@ -675,15 +676,20 @@ export class ChatV2 extends Server {
     // Bot handlers
     handleBotSubscribe(connection, roomId) {
         const attachment = connection.deserializeAttachment();
+        console.log(`[Bot Subscribe] Attachment:`, attachment);
         if (!attachment || attachment.type !== "bot") {
+            console.log(`[Bot Subscribe] Not authenticated as bot`);
             connection.send(JSON.stringify({ type: "error", message: "Not authenticated as bot" }));
             return;
         }
         if (!attachment.subscribedRooms.includes(roomId)) {
             attachment.subscribedRooms.push(roomId);
             connection.serializeAttachment(attachment);
+            console.log(`[Bot Subscribe] Subscribed to room ${roomId}, rooms: ${attachment.subscribedRooms.join(', ')}`);
         }
-        console.log(`[Bot] Subscribed to room ${roomId}`);
+        else {
+            console.log(`[Bot Subscribe] Already subscribed to room ${roomId}`);
+        }
     }
     handleBotUnsubscribe(connection, roomId) {
         const attachment = connection.deserializeAttachment();
@@ -779,10 +785,16 @@ export class ChatV2 extends Server {
 		`).toArray();
         const memberIds = new Set(roomMembers.map((m) => m.user_id));
         let sentCount = 0;
-        for (const connection of this.ctx.getWebSockets()) {
+        let botCount = 0;
+        const connections = this.ctx.getWebSockets();
+        console.log(`[Broadcast] Total connections: ${connections.length}`);
+        for (const connection of connections) {
             const attachment = connection.deserializeAttachment();
-            if (!attachment)
+            if (!attachment) {
+                console.log(`[Broadcast] Connection has no attachment`);
                 continue;
+            }
+            console.log(`[Broadcast] Connection type: ${attachment.type}`);
             if (attachment.type === "user") {
                 // Send to room members who have joined the room
                 if (memberIds.has(attachment.userId) && attachment.joinedRooms.includes(roomId)) {
@@ -791,24 +803,30 @@ export class ChatV2 extends Server {
                 }
             }
             else if (attachment.type === "bot") {
-                // Send to bot if subscribed to this room and it's a user message
-                if (attachment.subscribedRooms.includes(roomId) && message.type === "new_message" && message.message.source === "user") {
-                    // Plugin-compatible format: { type: "message", message: { room_id, user_id, content, timestamp } }
-                    const pluginMessage = {
-                        type: "message",
-                        message: {
-                            room_id: roomId,
-                            user_id: message.message.user_id,
-                            content: message.message.content,
-                            timestamp: message.message.created_at,
-                        },
-                    };
-                    connection.send(JSON.stringify(pluginMessage));
-                    sentCount++;
+                botCount++;
+                // Broadcast user messages from any room to bot
+                if (message.type === "new_message") {
+                    const newMessage = message;
+                    console.log(`[Broadcast] Bot check: msgType=${message.type}, source=${newMessage.message.source}`);
+                    if (newMessage.message.source === "user") {
+                        // Plugin-compatible format: { type: "message", message: { room_id, user_id, content, timestamp } }
+                        const pluginMessage = {
+                            type: "message",
+                            message: {
+                                room_id: roomId,
+                                user_id: newMessage.message.user_id,
+                                content: newMessage.message.content,
+                                timestamp: newMessage.message.created_at,
+                            },
+                        };
+                        console.log(`[Broadcast] Sending message to bot: ${JSON.stringify(pluginMessage)}`);
+                        connection.send(JSON.stringify(pluginMessage));
+                        sentCount++;
+                    }
                 }
             }
         }
-        console.log(`[Broadcast] Message sent to ${sentCount} connections in room ${roomId}`);
+        console.log(`[Broadcast] Message sent to ${sentCount} connections (${botCount} bots) in room ${roomId}`);
     }
     broadcastUserStatus(userId, status) {
         const message = status === "online"
