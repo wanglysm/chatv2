@@ -167,7 +167,6 @@ export class ChatV2 extends Server<Env> {
 				const attachment = connection.deserializeAttachment() as ConnectionAttachment | null;
 				if (attachment && (attachment.type === "user" || attachment.type === "bot")) {
 					if (now - attachment.lastPing > HEARTBEAT_TIMEOUT) {
-					console.log(`[Heartbeat] Connection timed out`);
 					connection.close();
 				}
 				}
@@ -657,7 +656,7 @@ export class ChatV2 extends Server<Env> {
 
 	// WebSocket handlers
 	onConnect(connection: Connection) {
-		console.log(`[WebSocket] Connection ${connection.id} connected`);
+		// Connection established
 	}
 
 	onMessage(connection: Connection, message: string) {
@@ -711,13 +710,11 @@ export class ChatV2 extends Server<Env> {
 					break;
 			}
 		} catch (error) {
-			console.error("[WebSocket] Error parsing message:", error);
 			connection.send(JSON.stringify({ type: "error", message: "Invalid message format" }));
 		}
 	}
 
 	onClose(connection: Connection) {
-		console.log(`[WebSocket] Connection ${connection.id} closed`);
 		const attachment = connection.deserializeAttachment() as ConnectionAttachment | null;
 		if (attachment?.type === "user") {
 			// Notify other users that this user is offline
@@ -726,7 +723,6 @@ export class ChatV2 extends Server<Env> {
 	}
 
 	handleUserAuth(connection: Connection, sessionId: string) {
-		console.log(`[Auth] User auth attempt, session: ${sessionId}`);
 
 		const sessions = this.ctx.storage.sql.exec(`
 			SELECT * FROM sessions WHERE id = '${sessionId}' AND expires_at > ${Date.now()}
@@ -752,12 +748,9 @@ export class ChatV2 extends Server<Env> {
 	}
 
 	handleBotAuth(connection: Connection, apiKey: string) {
-		console.log(`[Auth] Bot auth attempt`);
-
 		// Check against environment variable
 		const validApiKey = this.env.BOT_API_KEY || "default-bot-api-key";
 		if (apiKey !== validApiKey) {
-			console.log(`[Auth] Invalid API key: ${apiKey.substring(0, 10)}...`);
 			connection.send(JSON.stringify({ type: "auth_error", message: "Invalid API key" } as BotWSMessage));
 			connection.close();
 			return;
@@ -770,7 +763,6 @@ export class ChatV2 extends Server<Env> {
 			lastPing: Date.now(),
 		} as ConnectionAttachment);
 
-		console.log(`[Auth] Bot authenticated successfully`);
 		connection.send(JSON.stringify({ type: "auth_success" } as BotWSMessage));
 	}
 
@@ -893,9 +885,7 @@ export class ChatV2 extends Server<Env> {
 	// Bot handlers
 	handleBotSubscribe(connection: Connection, roomId: string) {
 		const attachment = connection.deserializeAttachment() as ConnectionAttachment | null;
-		console.log(`[Bot Subscribe] Attachment:`, attachment);
 		if (!attachment || attachment.type !== "bot") {
-			console.log(`[Bot Subscribe] Not authenticated as bot`);
 			connection.send(JSON.stringify({ type: "error", message: "Not authenticated as bot" } as BotWSMessage));
 			return;
 		}
@@ -903,9 +893,6 @@ export class ChatV2 extends Server<Env> {
 		if (!attachment.subscribedRooms.includes(roomId)) {
 			attachment.subscribedRooms.push(roomId);
 			connection.serializeAttachment(attachment);
-			console.log(`[Bot Subscribe] Subscribed to room ${roomId}, rooms: ${attachment.subscribedRooms.join(', ')}`);
-		} else {
-			console.log(`[Bot Subscribe] Already subscribed to room ${roomId}`);
 		}
 	}
 
@@ -976,7 +963,6 @@ export class ChatV2 extends Server<Env> {
 
 		// Check if bot is subscribed to this room
 		if (!attachment.subscribedRooms.includes(room_id)) {
-			console.log(`[Bot] Not subscribed to room ${room_id}, auto-subscribing...`);
 			attachment.subscribedRooms.push(room_id);
 			connection.serializeAttachment(attachment);
 		}
@@ -1021,16 +1007,12 @@ export class ChatV2 extends Server<Env> {
 		let botCount = 0;
 
 		const connections = this.ctx.getWebSockets();
-		console.log(`[Broadcast] Total connections: ${connections.length}`);
 
 		for (const connection of connections) {
 			const attachment = connection.deserializeAttachment() as ConnectionAttachment | null;
 			if (!attachment) {
-				console.log(`[Broadcast] Connection has no attachment`);
 				continue;
 			}
-
-			console.log(`[Broadcast] Connection type: ${attachment.type}`);
 
 			if (attachment.type === "user") {
 				// Send to all room members
@@ -1043,8 +1025,7 @@ export class ChatV2 extends Server<Env> {
 				// Broadcast user messages from any room to bot
 				if (message.type === "new_message") {
 					const newMessage = message as Extract<WSMessage, { type: "new_message" }>;
-					console.log(`[Broadcast] Bot check: msgType=${message.type}, source=${newMessage.message.source}`);
-					
+
 					if (newMessage.message.source === "user") {
 						// Plugin-compatible format: { type: "message", message: { room_id, user_id, content, timestamp } }
 						const pluginMessage = {
@@ -1056,15 +1037,12 @@ export class ChatV2 extends Server<Env> {
 								timestamp: newMessage.message.created_at,
 							},
 						};
-						console.log(`[Broadcast] Sending message to bot: ${JSON.stringify(pluginMessage)}`);
 						connection.send(JSON.stringify(pluginMessage));
 						sentCount++;
 					}
 				}
 			}
 		}
-
-		console.log(`[Broadcast] Message sent to ${sentCount} connections (${botCount} bots) in room ${roomId}`);
 	}
 
 	broadcastUserStatus(userId: string, status: "online" | "offline") {
@@ -1090,7 +1068,6 @@ export default {
 		// WebSocket connections
 		if (path.startsWith("/parties/") || path === "/ws/bot") {
 			try {
-				console.log(`[WebSocket] Handling ${path}`);
 				const id = env.ChatV2.idFromName("ChatV2");
 				const stub = env.ChatV2.get(id);
 
@@ -1104,7 +1081,6 @@ export default {
 
 				return await stub.fetch(newRequest);
 			} catch (error) {
-				console.error(`[WebSocket] Error:`, error);
 				return new Response(
 					JSON.stringify({
 						success: false,

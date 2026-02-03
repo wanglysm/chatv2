@@ -76,15 +76,12 @@ export function useWebSocket({
 
 		setConnectionState(reconnectAttempt > 0 ? "reconnecting" : "connecting");
 
-		console.log(`[WebSocket] Connecting... (attempt ${reconnectAttempt + 1})`);
-
 		const socket = new PartySocket({
 			host: window.location.host,
 			room: "ChatV2",
 		});
 
 		socket.addEventListener("open", () => {
-			console.log("[WebSocket] Connected");
 			setConnectionState("connected");
 			setReconnectAttempt(0);
 
@@ -96,7 +93,6 @@ export function useWebSocket({
 
 			// Rejoin rooms if reconnecting
 			if (joinedRoomsRef.current.size > 0) {
-				console.log("[WebSocket] Rejoining rooms:", Array.from(joinedRoomsRef.current));
 				joinedRoomsRef.current.forEach((roomId) => {
 					socket.send(JSON.stringify({ type: "join_room", room_id: roomId }));
 				});
@@ -108,7 +104,6 @@ export function useWebSocket({
 		socket.addEventListener("message", (event) => {
 			try {
 				const message = JSON.parse(event.data) as WSMessage;
-				console.log("[WebSocket] Received:", message.type);
 
 				if (message.type === "pong") {
 					// Heartbeat response, connection is alive
@@ -116,12 +111,10 @@ export function useWebSocket({
 				}
 
 				if (message.type === "auth_success") {
-					console.log("[WebSocket] Authenticated as user:", message.user_id);
 					return;
 				}
 
 				if (message.type === "auth_error") {
-					console.error("[WebSocket] Auth error:", message.message);
 					return;
 				}
 
@@ -137,12 +130,11 @@ export function useWebSocket({
 
 				onMessageRef.current?.(message);
 			} catch (error) {
-				console.error("[WebSocket] Failed to parse message:", error);
+				// Failed to parse message
 			}
 		});
 
 		socket.addEventListener("close", () => {
-			console.log("[WebSocket] Closed");
 			setConnectionState("disconnected");
 			clearHeartbeat();
 			onDisconnectRef.current?.();
@@ -153,7 +145,6 @@ export function useWebSocket({
 				MAX_RECONNECT_DELAY
 			);
 
-			console.log(`[WebSocket] Reconnecting in ${delay}ms...`);
 			setReconnectAttempt((prev) => prev + 1);
 
 			reconnectTimeoutRef.current = setTimeout(() => {
@@ -161,8 +152,8 @@ export function useWebSocket({
 			}, delay);
 		});
 
-		socket.addEventListener("error", (error) => {
-			console.error("[WebSocket] Error:", error);
+		socket.addEventListener("error", () => {
+			// WebSocket error
 		});
 
 		socketRef.current = socket;
@@ -190,7 +181,6 @@ export function useWebSocket({
 	useEffect(() => {
 		const handleVisibilityChange = () => {
 			if (document.visibilityState === "visible" && socketRef.current?.readyState !== WebSocket.OPEN) {
-				console.log("[WebSocket] Page visible, checking connection...");
 				if (sessionId) {
 					connect();
 				}
