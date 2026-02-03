@@ -266,7 +266,9 @@ function ChatPage() {
 				});
 
 				// Save message to local IndexedDB
-				chatDB.addMessage(message.message.room_id, message.message, message.user);
+				chatDB.addMessage(message.message.room_id, message.message, message.user).catch(err => {
+					console.error('[DB] Failed to save message:', err);
+				});
 
 				if (selectedRoom?.id === message.message.room_id) {
 					// User is viewing this room, send ack immediately (but not for own messages)
@@ -438,6 +440,7 @@ function ChatPage() {
 		try {
 			// First, try to load from local IndexedDB for instant display
 			const localData = await chatDB.getRoomData(roomId);
+			console.log(`[DB] Loaded local data for room ${roomId}:`, localData ? `${localData.messages.length} messages` : 'none');
 			if (localData) {
 				setMessages(localData.messages);
 				setUsers(localData.users);
@@ -449,6 +452,8 @@ function ChatPage() {
 			});
 			const data = (await response.json()) as APIResponse<{ messages: Message[]; users: User[] }>;
 			if (data.success && data.data) {
+				console.log(`[DB] Server returned ${data.data.messages.length} messages`);
+				
 				// Merge server messages with local messages
 				// Server may have deleted some messages, but local still has them
 				const localMsgs = localData?.messages || [];
@@ -461,6 +466,7 @@ function ChatPage() {
 				
 				// Convert back to array and sort by time
 				const mergedMessages = Array.from(messageMap.values()).sort((a, b) => a.created_at - b.created_at);
+				console.log(`[DB] Merged ${mergedMessages.length} messages`);
 				
 				// Merge users
 				const localUsers = localData?.users || [];
@@ -475,6 +481,7 @@ function ChatPage() {
 				
 				// Save merged data to local IndexedDB
 				await chatDB.saveRoomData(roomId, mergedMessages, mergedUsers);
+				console.log(`[DB] Saved ${mergedMessages.length} messages to IndexedDB`);
 
 				// After messages are fully loaded and saved, send pending acknowledgments
 				// This ensures large files are completely received before server deletes them

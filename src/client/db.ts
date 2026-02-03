@@ -48,8 +48,22 @@ class ChatDatabase {
 			};
 
 			const request = store.put(data);
-			request.onerror = () => reject(request.error);
-			request.onsuccess = () => resolve();
+			request.onerror = () => {
+				console.error(`[DB] Error saving data for room ${roomId}:`, request.error);
+				reject(request.error);
+			};
+			request.onsuccess = () => {
+				console.log(`[DB] Successfully saved ${messages.length} messages for room ${roomId}`);
+				resolve();
+			};
+			
+			// Also listen for transaction completion
+			transaction.oncomplete = () => {
+				console.log(`[DB] Transaction completed for room ${roomId}`);
+			};
+			transaction.onerror = () => {
+				console.error(`[DB] Transaction error for room ${roomId}:`, transaction.error);
+			};
 		});
 	}
 
@@ -79,6 +93,7 @@ class ChatDatabase {
 		if (!messages.some((m) => m.id === message.id)) {
 			messages.push(message);
 			messages.sort((a, b) => a.created_at - b.created_at);
+			console.log(`[DB] Added message ${message.id} to room ${roomId}, total: ${messages.length}`);
 		}
 
 		// Add user if provided and not exists
