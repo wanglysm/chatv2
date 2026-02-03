@@ -661,7 +661,6 @@ function ChatPage() {
 	const handleDeleteRoom = async (roomId: string, roomType: string, e: React.MouseEvent) => {
 		e.stopPropagation();
 
-		if (roomType !== "bot") return;
 		if (!confirm("确定要删除这个聊天室吗？")) return;
 
 		try {
@@ -719,6 +718,34 @@ function ChatPage() {
 
 	const getDisplayName = (user: User | undefined): string => {
 		return user?.nickname || user?.username || "未知用户";
+	};
+
+	// Delete message
+	const handleDeleteMessage = async (messageId: string) => {
+		if (!confirm("确定要删除这条消息吗？")) return;
+
+		try {
+			const response = await fetch(`/api/messages/${messageId}`, {
+				method: "DELETE",
+				headers: { Authorization: `Bearer ${session?.id}` },
+			});
+
+			const data = (await response.json()) as APIResponse;
+			if (data.success) {
+				// Remove from local state
+				setMessages((prev) => prev.filter((m) => m.id !== messageId));
+				// Remove from IndexedDB
+				if (selectedRoom) {
+					chatDB.addMessage(selectedRoom.id, { id: messageId } as Message, {} as User).catch(() => {
+						// Ignore error
+					});
+				}
+			} else {
+				alert("删除失败: " + data.error);
+			}
+		} catch {
+			alert("删除失败，请重试");
+		}
 	};
 
 	const formatTime = (timestamp: number) => {
@@ -795,14 +822,13 @@ function ChatPage() {
 							{unreadCounts.get(room.id) ? (
 								<div className="unread-badge">{unreadCounts.get(room.id)}</div>
 							) : null}
-							{room.type === "bot" && (
 								<button
-									onClick={(e) => handleDeleteRoom(room.id, room.type, e)}
-									className="delete-room-button"
-								>
-									×
-								</button>
-							)}
+								onClick={(e) => handleDeleteRoom(room.id, room.type, e)}
+								className="delete-room-button"
+								title="删除聊天"
+							>
+								×
+							</button>
 						</div>
 					))}
 				</div>
@@ -821,23 +847,32 @@ function ChatPage() {
 						</div>
 						<div className="messages-container" ref={messagesContainerRef}>
 							{messages.map((message) => {
-								const user = getUserById(message.user_id);
-								const isOwnMessage = message.user_id === currentUser.id;
-								return (
-									<div key={message.id} className={`message ${isOwnMessage ? "own" : "other"}`}>
-										{!isOwnMessage && (
-											<div className="message-avatar">{user?.avatar || "👤"}</div>
+							const user = getUserById(message.user_id);
+							const isOwnMessage = message.user_id === currentUser.id;
+							return (
+								<div key={message.id} className={`message ${isOwnMessage ? "own" : "other"}`}>
+									{!isOwnMessage && (
+										<div className="message-avatar">{user?.avatar || "👤"}</div>
+									)}
+									<div className="message-content">
+										{isOwnMessage && (
+											<button
+												className="message-delete-button"
+												onClick={() => handleDeleteMessage(message.id)}
+												title="删除消息"
+											>
+												×
+											</button>
 										)}
-										<div className="message-content">
 										{!isOwnMessage && (
 											<div className="message-sender">{getDisplayName(user)}</div>
 										)}
 										<MessageContentRenderer message={message} />
 										<div className="message-time">{formatTime(message.created_at)}</div>
-										</div>
 									</div>
-								);
-								})}
+								</div>
+							);
+							})}
 							</div>
 							<div className="input-area">
 								<input

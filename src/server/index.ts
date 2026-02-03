@@ -251,6 +251,10 @@ export class ChatV2 extends Server<Env> {
 			if (path === "/api/messages" && request.method === "POST") {
 				return this.handleSendMessage(request);
 			}
+			if (path.startsWith("/api/messages/") && request.method === "DELETE") {
+				const messageId = path.split("/")[3];
+				return this.handleDeleteMessage(messageId, request);
+			}
 
 			// User settings endpoints
 			if (path === "/api/change-password" && request.method === "POST") {
@@ -559,17 +563,55 @@ export class ChatV2 extends Server<Env> {
 			);
 		}
 
-		// Only allow deletion of bot rooms
-		if (room.type !== "bot") {
+		// Allow deletion of bot rooms and private rooms
+		if (room.type !== "bot" && room.type !== "private") {
 			return new Response(
-				JSON.stringify({ success: false, error: "Only bot rooms can be deleted" } as APIResponse),
+				JSON.stringify({ success: false, error: "Only bot and private rooms can be deleted" } as APIResponse),
 				{ status: 403, headers: { "Content-Type": "application/json" } }
 			);
 		}
 
+		// Delete in correct order: message_acks -> messages -> room_members -> rooms
+		this.ctx.storage.sql.exec(`DELETE FROM message_acks WHERE message_id IN (SELECT id FROM messages WHERE room_id = '${roomId}')`);
 		this.ctx.storage.sql.exec(`DELETE FROM messages WHERE room_id = '${roomId}'`);
 		this.ctx.storage.sql.exec(`DELETE FROM room_members WHERE room_id = '${roomId}'`);
 		this.ctx.storage.sql.exec(`DELETE FROM rooms WHERE id = '${roomId}'`);
+
+		return new Response(
+			JSON.stringify({ success: true } as APIResponse),
+			{ headers: { "Content-Type": "application/json" } }
+		);
+	}
+
+	async handleDeleteMessage(messageId: string, request: Request): Promise<Response> {
+		const userId = await this.validateSession(request);
+		if (!userId) {
+			return new Response(
+				JSON.stringify({ success: false, error: "Unauthorized" } as APIResponse),
+				{ status: 401, headers: { "Content-Type": "application/json" } }
+			);
+		}
+
+		// Get message info
+		const message = this.ctx.storage.sql.exec(`SELECT * FROM messages WHERE id = '${messageId}'`).toArray()[0] as unknown as Message | undefined;
+		if (!message) {
+			return new Response(
+				JSON.stringify({ success: false, error: "Message not found" } as APIResponse),
+				{ status: 404, headers: { "Content-Type": "application/json" } }
+			);
+		}
+
+		// Check if user is the message sender
+		if (message.user_id !== userId) {
+			return new Response(
+				JSON.stringify({ success: false, error: "Permission denied" } as APIResponse),
+				{ status: 403, headers: { "Content-Type": "application/json" } }
+			);
+		}
+
+		// Delete message_acks first, then message
+		this.ctx.storage.sql.exec(`DELETE FROM message_acks WHERE message_id = '${messageId}'`);
+		this.ctx.storage.sql.exec(`DELETE FROM messages WHERE id = '${messageId}'`);
 
 		return new Response(
 			JSON.stringify({ success: true } as APIResponse),

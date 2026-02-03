@@ -4,3 +4,7 @@ public/dist
 .DS_Store
 .env
 .wrangler
+
+# Compiled JavaScript files (source files are .ts and .tsx)
+src/**/*.js
+!src/**/*.d.ts

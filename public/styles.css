@@ -396,6 +396,7 @@ body {
 	padding: 12px 16px;
 	border-radius: 12px;
 	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+	position: relative;
 }
 
 .message-sender {
@@ -423,6 +424,47 @@ body {
 
 .message.own .message-time {
 	color: rgba(255, 255, 255, 0.7);
+}
+
+/* Message Delete Button */
+.message-delete-button {
+	position: absolute;
+	top: 4px;
+	right: 4px;
+	width: 20px;
+	height: 20px;
+	border: none;
+	background: rgba(0, 0, 0, 0.1);
+	color: #666;
+	border-radius: 50%;
+	cursor: pointer;
+	font-size: 14px;
+	line-height: 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	opacity: 0;
+	transition: opacity 0.2s, background 0.2s;
+	padding: 0;
+}
+
+.message-content:hover .message-delete-button {
+	opacity: 1;
+}
+
+.message-delete-button:hover {
+	background: rgba(244, 67, 54, 0.9);
+	color: white;
+}
+
+.message.own .message-delete-button {
+	background: rgba(255, 255, 255, 0.2);
+	color: rgba(255, 255, 255, 0.8);
+}
+
+.message.own .message-delete-button:hover {
+	background: rgba(244, 67, 54, 0.9);
+	color: white;
 }
 
 /* Input Area */
@@ -471,6 +513,34 @@ body {
 .send-button:disabled {
 	background: #ccc;
 	cursor: not-allowed;
+}
+
+/* Attach Button */
+.attach-button {
+	width: 40px;
+	height: 40px;
+	border: none;
+	background: #667eea;
+	color: white;
+	border-radius: 50%;
+	cursor: pointer;
+	font-size: 18px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	transition: background 0.3s, transform 0.2s;
+	flex-shrink: 0;
+}
+
+.attach-button:hover:not(:disabled) {
+	background: #5568d3;
+	transform: scale(1.05);
+}
+
+.attach-button:disabled {
+	background: #ccc;
+	cursor: not-allowed;
+	transform: none;
 }
 
 /* Empty State */
