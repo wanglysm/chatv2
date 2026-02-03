@@ -3,6 +3,8 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router";
 import { useWebSocket } from "./hooks/useWebSocket";
 import type { User, Room, Message, Session, WSMessage, APIResponse } from "../shared";
+import { marked } from "marked";
+import DOMPurify from "dompurify";
 
 // Connection status indicator component
 function ConnectionStatus({ state, reconnectAttempt }: { state: string; reconnectAttempt: number }) {
@@ -594,7 +596,12 @@ function ChatPage() {
 											{!isOwnMessage && (
 												<div className="message-sender">{getDisplayName(user)}</div>
 											)}
-											<div className="message-text">{message.content}</div>
+											<div
+												className="message-text markdown-content"
+												dangerouslySetInnerHTML={{
+													__html: DOMPurify.sanitize(marked.parse(message.content) as string),
+												}}
+											/>
 											<div className="message-time">{formatTime(message.created_at)}</div>
 										</div>
 									</div>
