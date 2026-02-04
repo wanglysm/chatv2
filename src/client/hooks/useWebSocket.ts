@@ -1,3 +1,4 @@
+
 import { useEffect, useRef, useCallback, useState } from "react";
 import PartySocket from "partysocket";
 import type { WSMessage } from "../../shared";
@@ -42,6 +43,12 @@ export function useWebSocket({
 	const onMessageRef = useRef(onMessage);
 	const onConnectRef = useRef(onConnect);
 	const onDisconnectRef = useRef(onDisconnect);
+	// 使用 ref 存储重连次数，避免触发重新渲染导致 connect 函数重建
+	const reconnectAttemptRef = useRef(0);
+	// 连接中标志，防止重复连接
+	const isConnectingRef = useRef(false);
+	// 关闭标志，防止组件卸载后还执行重连
+	const isClosedRef = useRef(false);
 
 	// Keep callbacks up to date
 	useEffect(() => {
@@ -68,14 +75,28 @@ export function useWebSocket({
 
 	const connect = useCallback(() => {
 		if (!sessionId) return;
+		// 如果已经在连接中，不要重复连接
+		if (isConnectingRef.current) {
+			return;
+		}
+		// 如果组件已卸载，不再连接
+		if (isClosedRef.current) {
+			return;
+		}
+		// 如果已经有连接且状态不是 CLOSED，先关闭
+		if (socketRef.current && socketRef.current.readyState !== WebSocket.CLOSED) {
+			socketRef.current.close();
+			socketRef.current = null;
+		}
 
-		// Clear any pending reconnect
+		// 清除任何待定的重连定时器
 		if (reconnectTimeoutRef.current) {
 			clearTimeout(reconnectTimeoutRef.current);
 			reconnectTimeoutRef.current = null;
 		}
 
-		setConnectionState(reconnectAttempt > 0 ? "reconnecting" : "connecting");
+		isConnectingRef.current = true;
+		setConnectionState(reconnectAttemptRef.current > 0 ? "reconnecting" : "connecting");
 
 		const socket = new PartySocket({
 			host: window.location.host,
@@ -83,7 +104,10 @@ export function useWebSocket({
 		});
 
 		socket.addEventListener("open", () => {
+			isConnectingRef.current = false;
 			setConnectionState("connected");
+			// 重置重连计数
+			reconnectAttemptRef.current = 0;
 			setReconnectAttempt(0);
 
 			// Authenticate
@@ -136,19 +160,28 @@ export function useWebSocket({
 		});
 
 		socket.addEventListener("close", () => {
+			isConnectingRef.current = false;
 			setConnectionState("disconnected");
 			clearHeartbeat();
 			onDisconnectRef.current?.();
 
+			// 如果组件已卸载，不再重连
+			if (isClosedRef.current) {
+				return;
+			}
+
+			// 增加重连计数
+			reconnectAttemptRef.current += 1;
+			setReconnectAttempt(reconnectAttemptRef.current);
+
 			// Schedule reconnect with exponential backoff
 			const delay = Math.min(
-				RECONNECT_BASE_DELAY * Math.pow(2, reconnectAttempt),
+				RECONNECT_BASE_DELAY * Math.pow(2, reconnectAttemptRef.current - 1),
 				MAX_RECONNECT_DELAY
 			);
 
-			setReconnectAttempt((prev) => prev + 1);
-
 			reconnectTimeoutRef.current = setTimeout(() => {
+				reconnectTimeoutRef.current = null;
 				connect();
 			}, delay);
 		});
@@ -158,31 +191,40 @@ export function useWebSocket({
 		});
 
 		socketRef.current = socket;
-	}, [sessionId, reconnectAttempt, startHeartbeat, clearHeartbeat]);
+	}, [sessionId, startHeartbeat, clearHeartbeat]);
 
 	// Initial connection
 	useEffect(() => {
+		isClosedRef.current = false;
 		if (sessionId) {
 			connect();
 		}
 
 		return () => {
 			// Cleanup on unmount
+			isClosedRef.current = true;
 			clearHeartbeat();
 			if (reconnectTimeoutRef.current) {
 				clearTimeout(reconnectTimeoutRef.current);
+				reconnectTimeoutRef.current = null;
 			}
 			if (socketRef.current) {
 				socketRef.current.close();
+				socketRef.current = null;
 			}
+			isConnectingRef.current = false;
 		};
 	}, [sessionId, connect, clearHeartbeat]);
 
 	// Handle page visibility changes
 	useEffect(() => {
 		const handleVisibilityChange = () => {
-			if (document.visibilityState === "visible" && socketRef.current?.readyState !== WebSocket.OPEN) {
-				if (sessionId) {
+			if (document.visibilityState === "visible") {
+				// 只有当前没有连接且不在连接中时才重新连接
+				if (socketRef.current?.readyState !== WebSocket.OPEN && 
+				    socketRef.current?.readyState !== WebSocket.CONNECTING &&
+				    !isConnectingRef.current &&
+				    sessionId) {
 					connect();
 				}
 			}
