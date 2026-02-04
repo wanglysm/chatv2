@@ -827,8 +827,8 @@ export class ChatV2 extends Server<Env> {
 					this.handleBotUnsubscribe(connection, parsed.room_id);
 					break;
 				case "send_message":
-					this.handleBotSendMessage(connection, parsed.room_id, parsed.content, parsed.external_id);
-					break;
+				this.handleBotSendMessage(connection, parsed.room_id, parsed.content, parsed.content_type, parsed.external_id);
+				break;
 				// Plugin-compatible message format
 				case "message":
 					if (parsed.message) {
@@ -1101,7 +1101,7 @@ export class ChatV2 extends Server<Env> {
 		}
 	}
 
-	handleBotSendMessage(connection: Connection, roomId: string, content: string, externalId?: string) {
+	handleBotSendMessage(connection: Connection, roomId: string, content: string, contentType?: string, externalId?: string) {
 		const attachment = connection.deserializeAttachment() as ConnectionAttachment | null;
 		if (!attachment || attachment.type !== "bot") {
 			connection.send(JSON.stringify({ type: "error", message: "Not authenticated as bot" } as BotWSMessage));
@@ -1111,9 +1111,13 @@ export class ChatV2 extends Server<Env> {
 		const messageId = this.generateId();
 		const now = Date.now();
 
+		// Determine content type (default to 'text' if not provided)
+		const validContentTypes = ["text", "image", "audio", "video", "file", "location", "card"] as const;
+		const actualContentType = (validContentTypes.includes(contentType as any) ? contentType : "text") as Message["content_type"];
+
 		this.ctx.storage.sql.exec(`
 			INSERT INTO messages (id, room_id, user_id, content, content_type, created_at, source, external_id)
-			VALUES ('${messageId}', '${roomId}', 'bot', '${content.replace(/'/g, "''")}', 'text', ${now}, 'bot', '${externalId || ""}')
+			VALUES ('${messageId}', '${roomId}', 'bot', '${content.replace(/'/g, "''")}', '${actualContentType}', ${now}, 'bot', '${externalId || ""}')
 		`);
 
 		// Broadcast to room members
@@ -1124,7 +1128,7 @@ export class ChatV2 extends Server<Env> {
 				room_id: roomId,
 				user_id: "bot",
 				content,
-				content_type: "text",
+				content_type: actualContentType,
 				created_at: now,
 				source: "bot",
 				external_id: externalId,
@@ -1226,17 +1230,16 @@ export class ChatV2 extends Server<Env> {
 					const newMessage = message as Extract<WSMessage, { type: "new_message" }>;
 
 					if (newMessage.message.source === "user") {
-						// Plugin-compatible format: { type: "message", message: { room_id, user_id, content, timestamp } }
-						const pluginMessage = {
-							type: "message",
-							message: {
-								room_id: roomId,
-								user_id: newMessage.message.user_id,
-								content: newMessage.message.content,
-								timestamp: newMessage.message.created_at,
-							},
+						// New format: { type: "user_message", room_id, user_id, content, content_type, timestamp }
+						const botMessage = {
+							type: "user_message",
+							room_id: roomId,
+							user_id: newMessage.message.user_id,
+							content: newMessage.message.content,
+							content_type: newMessage.message.content_type,
+							timestamp: newMessage.message.created_at,
 						};
-						connection.send(JSON.stringify(pluginMessage));
+						connection.send(JSON.stringify(botMessage));
 						sentCount++;
 					}
 				}

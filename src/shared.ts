@@ -89,7 +89,7 @@ export type BotWSMessage =
 	| { type: "subscribe"; room_id: string }
 	| { type: "unsubscribe"; room_id: string }
 	| { type: "user_message"; room_id: string; user_id: string; content: string; timestamp: number }
-	| { type: "send_message"; room_id: string; content: string; external_id?: string }
+	| { type: "send_message"; room_id: string; content: string; content_type?: string; external_id?: string }
 	| { type: "message_sent"; message_id: string; external_id?: string }
 	| { type: "error"; message: string };
 
