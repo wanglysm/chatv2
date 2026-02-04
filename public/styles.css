@@ -6,33 +6,34 @@
 
 body {
 	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-	background: #f5f5f5;
+	background: #ededed;
 	height: 100vh;
 	overflow: hidden;
 }
 
-/* Login Page */
+/* ==================== 登录页面 - 微信风格 ==================== */
 .login-container {
 	display: flex;
 	justify-content: center;
 	align-items: center;
 	height: 100vh;
-	background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+	background: #ededed;
 }
 
 .login-box {
 	background: white;
 	padding: 40px;
-	border-radius: 12px;
-	box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+	border-radius: 4px;
 	width: 100%;
-	max-width: 400px;
+	max-width: 360px;
 }
 
 .login-box h1 {
 	text-align: center;
-	margin-bottom: 30px;
-	color: #333;
+	margin-bottom: 40px;
+	color: #000;
+	font-size: 20px;
+	font-weight: 500;
 }
 
 .form-group {
@@ -42,32 +43,33 @@ body {
 .form-group label {
 	display: block;
 	margin-bottom: 8px;
-	color: #555;
-	font-weight: 500;
+	color: #333;
+	font-size: 14px;
 }
 
 .form-group input {
 	width: 100%;
 	padding: 12px;
-	border: 1px solid #ddd;
-	border-radius: 6px;
-	font-size: 14px;
+	border: none;
+	border-bottom: 1px solid #e0e0e0;
+	font-size: 16px;
+	outline: none;
 	transition: border-color 0.3s;
+	background: transparent;
 }
 
 .form-group input:focus {
-	outline: none;
-	border-color: #667eea;
+	border-bottom-color: #07c160;
 }
 
 .error-message {
-	color: #f44336;
+	color: #fa5151;
 	font-size: 14px;
 	margin-bottom: 15px;
 }
 
 .success-message {
-	color: #4caf50;
+	color: #07c160;
 	font-size: 14px;
 	margin-bottom: 15px;
 	text-align: center;
@@ -76,44 +78,51 @@ body {
 .login-button {
 	width: 100%;
 	padding: 12px;
-	background: #667eea;
+	background: #07c160;
 	color: white;
 	border: none;
-	border-radius: 6px;
+	border-radius: 4px;
 	font-size: 16px;
 	cursor: pointer;
 	transition: background 0.3s;
+	margin-top: 20px;
 }
 
 .login-button:hover {
-	background: #5568d3;
+	background: #06ad56;
+}
+
+.login-button:active {
+	background: #059a4c;
 }
 
 .login-hint {
 	text-align: center;
 	margin-top: 20px;
-	color: #888;
-	font-size: 14px;
+	color: #999;
+	font-size: 12px;
 }
 
-/* Chat Container */
+/* ==================== 聊天容器 ==================== */
 .chat-container {
 	display: flex;
 	height: 100vh;
+	background: #ededed;
 }
 
-/* Sidebar */
+/* ==================== 侧边栏 - 微信聊天列表风格 ==================== */
 .sidebar {
 	width: 300px;
 	background: #fff;
-	border-right: 1px solid #e0e0e0;
+	border-right: 1px solid #d6d6d6;
 	display: flex;
 	flex-direction: column;
 }
 
 .user-info {
-	padding: 20px;
-	border-bottom: 1px solid #e0e0e0;
+	padding: 15px;
+	background: #fff;
+	border-bottom: 1px solid #e5e5e5;
 	position: relative;
 }
 
@@ -121,8 +130,8 @@ body {
 	display: flex;
 	align-items: center;
 	cursor: pointer;
-	padding: 10px;
-	border-radius: 8px;
+	padding: 5px;
+	border-radius: 4px;
 	transition: background 0.2s;
 }
 
@@ -133,25 +142,26 @@ body {
 .user-info .avatar {
 	width: 40px;
 	height: 40px;
-	border-radius: 50%;
-	background: #667eea;
+	border-radius: 4px;
+	background: #07c160;
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	font-size: 18px;
-	margin-right: 12px;
+	margin-right: 10px;
 }
 
 .user-info .username {
 	flex: 1;
 	font-weight: 500;
-	color: #333;
+	color: #000;
+	font-size: 15px;
 }
 
 .connection-status {
 	display: flex;
 	align-items: center;
-	font-size: 12px;
+	font-size: 11px;
 	margin-right: 8px;
 }
 
@@ -163,19 +173,19 @@ body {
 }
 
 .menu-arrow {
-	color: #888;
+	color: #999;
 	font-size: 12px;
 }
 
 .user-menu-dropdown {
 	position: absolute;
 	top: 100%;
-	left: 20px;
-	right: 20px;
+	left: 15px;
+	right: 15px;
 	background: white;
 	border: 1px solid #e0e0e0;
-	border-radius: 8px;
-	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+	border-radius: 4px;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 	z-index: 100;
 	margin-top: 5px;
 }
@@ -199,37 +209,40 @@ body {
 }
 
 .user-menu-dropdown button:first-child {
-	border-radius: 8px 8px 0 0;
+	border-radius: 4px 4px 0 0;
 }
 
 .user-menu-dropdown button:last-child {
-	border-radius: 0 0 8px 8px;
+	border-radius: 0 0 4px 4px;
 }
 
 .menu-divider {
 	height: 1px;
 	background: #e0e0e0;
-	margin: 5px 0;
+	margin: 0;
 }
 
 .logout-item {
-	color: #f44336 !important;
+	color: #fa5151 !important;
 }
 
-/* Room List */
+/* 聊天列表 */
 .room-list {
 	flex: 1;
 	overflow-y: auto;
+	background: #fff;
 }
 
 .room-list-header {
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
-	padding: 15px 20px;
-	border-bottom: 1px solid #e0e0e0;
-	font-weight: 600;
-	color: #333;
+	padding: 12px 15px;
+	border-bottom: 1px solid #e5e5e5;
+	font-weight: 500;
+	color: #000;
+	font-size: 14px;
+	background: #fff;
 }
 
 .room-actions {
@@ -241,28 +254,31 @@ body {
 	width: 28px;
 	height: 28px;
 	border: none;
-	background: #667eea;
-	color: white;
-	border-radius: 6px;
+	background: transparent;
+	color: #666;
+	border-radius: 4px;
 	cursor: pointer;
-	font-size: 16px;
+	font-size: 18px;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	transition: background 0.2s;
+	transition: all 0.2s;
 }
 
 .add-room-button:hover {
-	background: #5568d3;
+	background: #f5f5f5;
+	color: #07c160;
 }
 
+/* 聊天列表项 - 微信风格 */
 .room-item {
 	display: flex;
 	align-items: center;
-	padding: 15px 20px;
+	padding: 12px 15px;
 	cursor: pointer;
 	transition: background 0.2s;
 	position: relative;
+	border-bottom: 1px solid #f0f0f0;
 }
 
 .room-item:hover {
@@ -270,54 +286,92 @@ body {
 }
 
 .room-item.active {
-	background: #e8eaf6;
+	background: #c9c9c9;
+}
+
+.room-item.active .room-name,
+.room-item.active .room-preview {
+	color: #000;
 }
 
 .room-avatar {
 	width: 48px;
 	height: 48px;
-	border-radius: 50%;
+	border-radius: 4px;
 	background: #e0e0e0;
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	font-size: 20px;
 	margin-right: 12px;
+	flex-shrink: 0;
 }
 
 .room-info {
 	flex: 1;
+	min-width: 0;
+}
+
+.room-header-row {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 4px;
 }
 
 .room-name {
 	font-weight: 500;
-	color: #333;
-	margin-bottom: 4px;
+	color: #000;
+	font-size: 15px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 
-.room-type {
+.room-time {
 	font-size: 12px;
-	color: #888;
+	color: #999;
+	flex-shrink: 0;
+}
+
+.room-preview {
+	font-size: 13px;
+	color: #999;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.room-meta {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	gap: 6px;
 }
 
 .unread-badge {
-	background: #f44336;
+	background: #fa5151;
 	color: white;
-	font-size: 12px;
-	padding: 2px 8px;
-	border-radius: 10px;
-	margin-right: 8px;
+	font-size: 11px;
+	min-width: 18px;
+	height: 18px;
+	padding: 0 5px;
+	border-radius: 9px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
 }
 
 .delete-room-button {
 	background: none;
 	border: none;
-	color: #888;
-	font-size: 20px;
+	color: #999;
+	font-size: 16px;
 	cursor: pointer;
-	padding: 0 5px;
+	padding: 4px;
 	opacity: 0;
 	transition: opacity 0.2s;
+	margin-left: 8px;
 }
 
 .room-item:hover .delete-room-button {
@@ -325,126 +379,203 @@ body {
 }
 
 .delete-room-button:hover {
-	color: #f44336;
+	color: #fa5151;
 }
 
-/* Chat Area */
+/* ==================== 聊天区域 - 微信风格 ==================== */
 .chat-area {
 	flex: 1;
 	display: flex;
 	flex-direction: column;
-	background: #fafafa;
+	background: #ededed;
 }
 
 .chat-header {
-	padding: 20px;
-	background: white;
-	border-bottom: 1px solid #e0e0e0;
+	padding: 12px 20px;
+	background: #f5f5f5;
+	border-bottom: 1px solid #d6d6d6;
+	display: flex;
+	align-items: center;
+	justify-content: center;
 }
 
 .chat-title {
 	display: flex;
 	align-items: center;
-	gap: 12px;
+	gap: 10px;
 }
 
 .chat-avatar {
-	font-size: 24px;
+	font-size: 20px;
 }
 
 .chat-name {
-	font-size: 18px;
-	font-weight: 600;
-	color: #333;
+	font-size: 16px;
+	font-weight: 500;
+	color: #000;
+}
+
+/* 返回按钮（移动端显示） */
+.back-button {
+	display: none;
+	position: absolute;
+	left: 15px;
+	background: none;
+	border: none;
+	font-size: 20px;
+	color: #576b95;
+	cursor: pointer;
+	padding: 5px;
 }
 
 .messages-container {
 	flex: 1;
 	overflow-y: auto;
-	padding: 20px;
+	padding: 15px;
 }
 
+/* 时间分隔线 */
+.time-divider {
+	text-align: center;
+	margin: 20px 0;
+}
+
+.time-divider span {
+	font-size: 12px;
+	color: #999;
+	background: #dadada;
+	padding: 4px 8px;
+	border-radius: 4px;
+}
+
+/* 消息气泡 - 微信风格 */
 .message {
 	display: flex;
-	margin-bottom: 20px;
+	margin-bottom: 15px;
+	align-items: flex-start;
 }
 
 .message.own {
 	justify-content: flex-end;
 }
 
+.message.own .message-avatar {
+	margin-right: 0;
+	margin-left: 10px;
+}
+
+.message.own .message-content-wrapper {
+	align-items: flex-end;
+}
+
 .message.own .message-content {
-	background: #667eea;
-	color: white;
+	background: #95ec69;
+	color: #000;
+}
+
+.message.own .message-content::after {
+	left: auto;
+	right: -6px;
+	border-left-color: #95ec69;
+	border-right-color: transparent;
+}
+
+.message.own .message-sender {
+	text-align: right;
+}
+
+.message.own .message-time {
+	color: #666;
 }
 
 .message-avatar {
-	width: 36px;
-	height: 36px;
-	border-radius: 50%;
+	width: 40px;
+	height: 40px;
+	border-radius: 4px;
 	background: #e0e0e0;
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	font-size: 16px;
-	margin-right: 12px;
+	margin-right: 10px;
+	flex-shrink: 0;
+}
+
+.message-content-wrapper {
+	display: flex;
+	flex-direction: column;
+	max-width: 60%;
 }
 
 .message-content {
-	max-width: 60%;
-	background: white;
-	padding: 12px 16px;
-	border-radius: 12px;
-	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+	background: #fff;
+	padding: 10px 14px;
+	border-radius: 4px;
 	position: relative;
+	word-wrap: break-word;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+/* 气泡小三角 */
+.message-content::after {
+	content: '';
+	position: absolute;
+	top: 12px;
+	left: -6px;
+	width: 0;
+	height: 0;
+	border-top: 6px solid transparent;
+	border-bottom: 6px solid transparent;
+	border-right: 6px solid #fff;
+	border-left: none;
+}
+
+.message.own .message-content::after {
+	border-right: none;
+	border-left: 6px solid #95ec69;
+	left: auto;
+	right: -6px;
 }
 
 .message-sender {
 	font-size: 12px;
-	color: #888;
+	color: #999;
 	margin-bottom: 4px;
-}
-
-.message.own .message-sender {
-	color: rgba(255, 255, 255, 0.8);
+	margin-left: 2px;
 }
 
 .message-text {
-	font-size: 14px;
+	font-size: 15px;
 	line-height: 1.5;
 	word-wrap: break-word;
 }
 
 .message-time {
 	font-size: 11px;
-	color: #888;
+	color: #999;
 	margin-top: 4px;
 	text-align: right;
 }
 
-.message.own .message-time {
-	color: rgba(255, 255, 255, 0.7);
-}
-
-/* Message Delete Button */
+/* 消息删除按钮 */
 .message-delete-button {
 	position: absolute;
-	top: 4px;
-	right: 4px;
-	width: 20px;
-	height: 20px;
+	top: 2px;
+	right: 2px;
+	width: 18px;
+	height: 18px;
 	border: none;
 	background: rgba(0, 0, 0, 0.1);
 	color: #666;
 	border-radius: 50%;
 	cursor: pointer;
-	font-size: 14px;
+	font-size: 12px;
 	line-height: 1;
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	opacity: 0;
-	transition: opacity 0.2s, background 0.2s;
+	transition: opacity 0.2s;
 	padding: 0;
 }
 
@@ -453,61 +584,84 @@ body {
 }
 
 .message-delete-button:hover {
-	background: rgba(244, 67, 54, 0.9);
+	background: #fa5151;
 	color: white;
 }
 
 .message.own .message-delete-button {
-	background: rgba(255, 255, 255, 0.2);
-	color: rgba(255, 255, 255, 0.8);
+	background: rgba(0, 0, 0, 0.1);
+	color: #666;
 }
 
-.message.own .message-delete-button:hover {
-	background: rgba(244, 67, 54, 0.9);
-	color: white;
-}
-
-/* Input Area */
+/* ==================== 输入区域 - 微信风格 ==================== */
 .input-area {
 	display: flex;
-	padding: 20px;
-	background: white;
-	border-top: 1px solid #e0e0e0;
-	gap: 12px;
+	align-items: center;
+	padding: 10px 15px;
+	background: #f7f7f7;
+	border-top: 1px solid #d6d6d6;
+	gap: 10px;
+}
+
+.attach-button {
+	width: 32px;
+	height: 32px;
+	border: none;
+	background: transparent;
+	color: #666;
+	border-radius: 50%;
+	cursor: pointer;
+	font-size: 22px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	transition: all 0.2s;
+	flex-shrink: 0;
+}
+
+.attach-button:hover:not(:disabled) {
+	color: #07c160;
+}
+
+.attach-button:disabled {
+	color: #ccc;
+	cursor: not-allowed;
 }
 
 .message-input {
 	flex: 1;
-	padding: 12px 16px;
-	border: 1px solid #ddd;
-	border-radius: 24px;
-	font-size: 14px;
+	padding: 8px 12px;
+	border: none;
+	border-radius: 4px;
+	font-size: 15px;
 	outline: none;
-	transition: border-color 0.3s;
+	background: #fff;
+	min-height: 36px;
 }
 
 .message-input:focus {
-	border-color: #667eea;
+	background: #fff;
 }
 
 .message-input:disabled {
-	background: #f5f5f5;
+	background: #f0f0f0;
 	cursor: not-allowed;
 }
 
 .send-button {
-	padding: 12px 24px;
-	background: #667eea;
+	padding: 6px 16px;
+	background: #07c160;
 	color: white;
 	border: none;
-	border-radius: 24px;
+	border-radius: 4px;
 	font-size: 14px;
 	cursor: pointer;
 	transition: background 0.3s;
+	flex-shrink: 0;
 }
 
 .send-button:hover:not(:disabled) {
-	background: #5568d3;
+	background: #06ad56;
 }
 
 .send-button:disabled {
@@ -515,54 +669,28 @@ body {
 	cursor: not-allowed;
 }
 
-/* Attach Button */
-.attach-button {
-	width: 40px;
-	height: 40px;
-	border: none;
-	background: #667eea;
-	color: white;
-	border-radius: 50%;
-	cursor: pointer;
-	font-size: 18px;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	transition: background 0.3s, transform 0.2s;
-	flex-shrink: 0;
-}
-
-.attach-button:hover:not(:disabled) {
-	background: #5568d3;
-	transform: scale(1.05);
-}
-
-.attach-button:disabled {
-	background: #ccc;
-	cursor: not-allowed;
-	transform: none;
-}
-
-/* Empty State */
+/* ==================== 空状态 ==================== */
 .empty-state {
 	flex: 1;
 	display: flex;
 	flex-direction: column;
 	align-items: center;
 	justify-content: center;
-	color: #888;
+	color: #999;
+	background: #ededed;
 }
 
 .empty-icon {
 	font-size: 64px;
 	margin-bottom: 20px;
+	opacity: 0.5;
 }
 
 .empty-text {
-	font-size: 16px;
+	font-size: 14px;
 }
 
-/* Modals */
+/* ==================== 模态框 - 微信风格 ==================== */
 .modal-overlay {
 	position: fixed;
 	top: 0;
@@ -578,64 +706,71 @@ body {
 
 .modal-content {
 	background: white;
-	padding: 30px;
+	padding: 0;
 	border-radius: 12px;
 	width: 100%;
-	max-width: 400px;
-	box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+	max-width: 320px;
+	overflow: hidden;
 }
 
 .modal-content h2 {
-	margin-bottom: 20px;
-	color: #333;
+	padding: 20px 20px 0;
+	margin: 0;
+	color: #000;
+	font-size: 16px;
+	font-weight: 500;
+	text-align: center;
+}
+
+.modal-form {
+	padding: 20px;
 }
 
 .modal-buttons {
 	display: flex;
-	gap: 10px;
-	margin-top: 20px;
+	border-top: 1px solid #e5e5e5;
 }
 
 .modal-buttons button {
 	flex: 1;
-	padding: 12px;
+	padding: 14px;
 	border: none;
-	border-radius: 6px;
+	background: none;
 	cursor: pointer;
-	font-size: 14px;
+	font-size: 16px;
 	transition: background 0.2s;
 }
 
 .modal-buttons button[type="button"] {
-	background: #e0e0e0;
-	color: #333;
+	color: #000;
+	border-right: 1px solid #e5e5e5;
 }
 
 .modal-buttons button[type="button"]:hover {
-	background: #d0d0d0;
+	background: #f5f5f5;
 }
 
 .modal-buttons button[type="submit"] {
-	background: #667eea;
-	color: white;
+	color: #576b95;
+	font-weight: 500;
 }
 
 .modal-buttons button[type="submit"]:hover {
-	background: #5568d3;
+	background: #f5f5f5;
 }
 
-/* User List */
+/* 用户列表 */
 .user-list {
 	max-height: 300px;
 	overflow-y: auto;
+	padding: 10px 0;
 }
 
 .user-list-item {
 	display: flex;
 	align-items: center;
-	padding: 12px;
+	padding: 12px 20px;
 	cursor: pointer;
-	border-radius: 8px;
 	transition: background 0.2s;
 }
 
@@ -646,7 +781,7 @@ body {
 .user-list-item .avatar {
 	width: 40px;
 	height: 40px;
-	border-radius: 50%;
+	border-radius: 4px;
 	background: #e0e0e0;
 	display: flex;
 	align-items: center;
@@ -657,16 +792,18 @@ body {
 
 .user-list-item .username {
 	font-weight: 500;
-	color: #333;
+	color: #000;
+	font-size: 15px;
 }
 
 .empty-message {
 	text-align: center;
-	color: #888;
-	padding: 20px;
+	color: #999;
+	padding: 30px;
+	font-size: 14px;
 }
 
-/* Markdown Content Styles */
+/* ==================== Markdown 内容样式 ==================== */
 .markdown-content h1,
 .markdown-content h2,
 .markdown-content h3,
@@ -679,11 +816,11 @@ body {
 }
 
 .markdown-content h1 {
-	font-size: 1.5em;
+	font-size: 1.4em;
 }
 
 .markdown-content h2 {
-	font-size: 1.3em;
+	font-size: 1.2em;
 }
 
 .markdown-content h3 {
@@ -733,7 +870,7 @@ body {
 }
 
 .markdown-content a {
-	color: #667eea;
+	color: #576b95;
 	text-decoration: none;
 }
 
@@ -756,30 +893,242 @@ body {
 	background: rgba(0, 0, 0, 0.05);
 }
 
-/* Dark message (own message) markdown styles */
+/* 自己的消息中的 markdown 样式 */
 .message.own .markdown-content code {
-	background: rgba(255, 255, 255, 0.2);
+	background: rgba(0, 0, 0, 0.1);
 }
 
 .message.own .markdown-content pre {
-	background: rgba(255, 255, 255, 0.15);
+	background: rgba(0, 0, 0, 0.08);
 }
 
 .message.own .markdown-content blockquote {
-	border-left-color: rgba(255, 255, 255, 0.4);
-	color: rgba(255, 255, 255, 0.9);
+	border-left-color: rgba(0, 0, 0, 0.2);
+	color: rgba(0, 0, 0, 0.7);
 }
 
 .message.own .markdown-content a {
-	color: #fff;
-	text-decoration: underline;
+	color: #576b95;
 }
 
 .message.own .markdown-content th {
-	background: rgba(255, 255, 255, 0.2);
+	background: rgba(0, 0, 0, 0.1);
 }
 
 .message.own .markdown-content th,
 .message.own .markdown-content td {
-	border-color: rgba(255, 255, 255, 0.3);
+	border-color: rgba(0, 0, 0, 0.2);
+}
+
+/* ==================== H5 移动端适配 ==================== */
+@media screen and (max-width: 768px) {
+	/* 登录页面移动端适配 */
+	.login-box {
+		padding: 30px 20px;
+		margin: 0 20px;
+		max-width: none;
+	}
+
+	.login-box h1 {
+		font-size: 18px;
+		margin-bottom: 30px;
+	}
+
+	/* 聊天容器移动端 */
+	.chat-container {
+		position: relative;
+	}
+
+	/* 侧边栏移动端 - 全屏抽屉 */
+	.sidebar {
+		position: absolute;
+		top: 0;
+		left: 0;
+		width: 100%;
+		height: 100%;
+		z-index: 10;
+		transform: translateX(0);
+		transition: transform 0.3s ease;
+	}
+
+	.sidebar.hidden {
+		transform: translateX(-100%);
+	}
+
+	/* 聊天区域移动端 */
+	.chat-area {
+		width: 100%;
+		position: absolute;
+		top: 0;
+		left: 0;
+		height: 100%;
+		z-index: 5;
+		transform: translateX(100%);
+		transition: transform 0.3s ease;
+	}
+
+	.chat-area.active {
+		transform: translateX(0);
+	}
+
+	/* 显示返回按钮 */
+	.back-button {
+		display: block;
+	}
+
+	.chat-header {
+		padding: 10px 15px;
+		padding-left: 45px;
+		position: relative;
+	}
+
+	/* 消息区域移动端 */
+	.messages-container {
+		padding: 10px;
+	}
+
+	.message-content-wrapper {
+		max-width: 75%;
+	}
+
+	.message-avatar {
+		width: 36px;
+		height: 36px;
+	}
+
+	.message-content {
+		padding: 8px 12px;
+	}
+
+	.message-text {
+		font-size: 16px;
+	}
+
+	/* 输入区域移动端 */
+	.input-area {
+		padding: 8px 10px;
+		padding-bottom: calc(8px + env(safe-area-inset-bottom));
+		gap: 8px;
+	}
+
+	.attach-button {
+		width: 36px;
+		height: 36px;
+		font-size: 24px;
+	}
+
+	.message-input {
+		font-size: 16px;
+		padding: 10px 12px;
+	}
+
+	.send-button {
+		padding: 8px 14px;
+		font-size: 15px;
+	}
+
+	/* 模态框移动端 */
+	.modal-content {
+		max-width: 280px;
+		margin: 0 20px;
+	}
+
+	.modal-content h2 {
+		font-size: 15px;
+	}
+
+	.modal-buttons button {
+		padding: 12px;
+		font-size: 15px;
+	}
+
+	/* 用户列表移动端 */
+	.user-list-item {
+		padding: 12px 15px;
+	}
+
+	/* 触摸友好的按钮 */
+	.add-room-button,
+	.delete-room-button {
+		min-width: 44px;
+		min-height: 44px;
+	}
+
+	.delete-room-button {
+		opacity: 1;
+		font-size: 18px;
+	}
+
+	/* 聊天列表项移动端 */
+	.room-item {
+		padding: 10px 15px;
+	}
+
+	.room-avatar {
+		width: 44px;
+		height: 44px;
+	}
+
+	.room-name {
+		font-size: 16px;
+	}
+
+	.room-preview {
+		font-size: 13px;
+	}
+}
+
+/* 小屏幕手机适配 */
+@media screen and (max-width: 375px) {
+	.message-content-wrapper {
+		max-width: 80%;
+	}
+
+	.message-text {
+		font-size: 15px;
+	}
+
+	.room-name {
+		font-size: 15px;
+	}
+
+	.room-preview {
+		font-size: 12px;
+	}
+}
+
+/* 横屏模式适配 */
+@media screen and (max-height: 500px) and (orientation: landscape) {
+	.login-container {
+		padding: 20px;
+	}
+
+	.login-box {
+		padding: 20px;
+	}
+
+	.input-area {
+		padding: 6px 10px;
+	}
+
+	.messages-container {
+		padding: 8px;
+	}
+}
+
+/* 安全区域适配 - iPhone X+ */
+@supports (padding-top: env(safe-area-inset-top)) {
+	@media screen and (max-width: 768px) {
+		.sidebar {
+			padding-top: env(safe-area-inset-top);
+		}
+
+		.chat-header {
+			padding-top: calc(10px + env(safe-area-inset-top));
+		}
+
+		.back-button {
+			top: calc(5px + env(safe-area-inset-top));
+		}
+	}
 }

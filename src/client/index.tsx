@@ -221,12 +221,26 @@ function ChatPage() {
 	const [showChangePassword, setShowChangePassword] = useState(false);
 	const [showChangeNickname, setShowChangeNickname] = useState(false);
 	const [showUserMenu, setShowUserMenu] = useState(false);
+	// 移动端侧边栏显示状态
+	const [showSidebar, setShowSidebar] = useState(true);
+	// 检测是否为移动端
+	const [isMobile, setIsMobile] = useState(false);
 
 	const messagesContainerRef = useRef<HTMLDivElement>(null);
 	const userMenuRef = useRef<HTMLDivElement>(null);
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const navigate = useNavigate();
 	const originalTitleRef = useRef<string>("ChatV2");
+
+	// 检测屏幕尺寸
+	useEffect(() => {
+		const checkMobile = () => {
+			setIsMobile(window.innerWidth <= 768);
+		};
+		checkMobile();
+		window.addEventListener('resize', checkMobile);
+		return () => window.removeEventListener('resize', checkMobile);
+	}, []);
 
 	// Load session and user
 	useEffect(() => {
@@ -469,6 +483,21 @@ function ChatPage() {
 
 		// Join room via WebSocket
 		joinRoom(room.id);
+
+		// 移动端：选择聊天后隐藏侧边栏
+		if (isMobile) {
+			setShowSidebar(false);
+		}
+	};
+
+	// 返回聊天列表（移动端）
+	const handleBackToList = () => {
+		setShowSidebar(true);
+		if (selectedRoom) {
+			leaveRoom(selectedRoom.id);
+			setSelectedRoom(null);
+			setMessages([]);
+		}
 	};
 
 	// Track loading state to prevent duplicate calls
@@ -803,9 +832,20 @@ function ChatPage() {
 		return <div>加载中...</div>;
 	}
 
+	// 获取最后一条消息预览
+	const getLastMessagePreview = (roomId: string): string => {
+		// 这里可以扩展为显示最后一条消息内容
+		return "";
+	};
+
+	// 获取房间最后消息时间
+	const getRoomLastTime = (room: Room): string => {
+		return "";
+	};
+
 	return (
 		<div className="chat-container">
-			<div className="sidebar">
+			<div className={`sidebar ${!showSidebar && isMobile ? 'hidden' : ''}`}>
 				<div className="user-info" ref={userMenuRef}>
 					<div className="user-info-main" onClick={() => setShowUserMenu(!showUserMenu)}>
 						<div className="avatar">{currentUser.avatar || "👤"}</div>
@@ -860,30 +900,36 @@ function ChatPage() {
 								{room.avatar || (room.type === "bot" ? "🤖" : "💬")}
 							</div>
 							<div className="room-info">
-								<div className="room-name">{room.name}</div>
-								<div className="room-type">
-									{room.type === "bot" ? "AI助手" : room.type === "group" ? "群聊" : "私聊"}
+								<div className="room-header-row">
+									<div className="room-name">{room.name}</div>
+									<div className="room-time">{getRoomLastTime(room)}</div>
+								</div>
+								<div className="room-preview">
+									{getLastMessagePreview(room.id) || (room.type === "bot" ? "AI助手" : room.type === "group" ? "群聊" : "私聊")}
 								</div>
 							</div>
-							{unreadCounts.get(room.id) ? (
-								<div className="unread-badge">{unreadCounts.get(room.id)}</div>
-							) : null}
+							<div className="room-meta">
+								{unreadCounts.get(room.id) ? (
+									<div className="unread-badge">{unreadCounts.get(room.id)}</div>
+								) : null}
 								<button
-								onClick={(e) => handleDeleteRoom(room.id, room.type, e)}
-								className="delete-room-button"
-								title="删除聊天"
-							>
-								×
-							</button>
+									onClick={(e) => handleDeleteRoom(room.id, room.type, e)}
+									className="delete-room-button"
+									title="删除聊天"
+								>
+									×
+								</button>
+							</div>
 						</div>
 					))}
 				</div>
 			</div>
 
-			<div className="chat-area">
+			<div className={`chat-area ${selectedRoom && isMobile ? 'active' : ''}`}>
 				{selectedRoom ? (
 					<>
 						<div className="chat-header">
+							<button className="back-button" onClick={handleBackToList}>←</button>
 							<div className="chat-title">
 								<span className="chat-avatar">
 									{selectedRoom.avatar || (selectedRoom.type === "bot" ? "🤖" : "💬")}
@@ -900,21 +946,22 @@ function ChatPage() {
 									{!isOwnMessage && (
 										<div className="message-avatar">{user?.avatar || "👤"}</div>
 									)}
-									<div className="message-content">
-										{isOwnMessage && (
-											<button
-												className="message-delete-button"
-												onClick={() => handleDeleteMessage(message.id)}
-												title="删除消息"
-											>
-												×
-											</button>
-										)}
+									<div className="message-content-wrapper">
 										{!isOwnMessage && (
 											<div className="message-sender">{getDisplayName(user)}</div>
 										)}
-										<MessageContentRenderer message={message} />
-										<div className="message-time">{formatTime(message.created_at)}</div>
+										<div className="message-content">
+											{isOwnMessage && (
+												<button
+													className="message-delete-button"
+													onClick={() => handleDeleteMessage(message.id)}
+													title="删除消息"
+												>
+													×
+												</button>
+											)}
+											<MessageContentRenderer message={message} />
+										</div>
 									</div>
 								</div>
 							);
