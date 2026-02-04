@@ -1091,6 +1091,30 @@ export class ChatV2 extends Server<Env> {
 			attachment.subscribedRooms.push(roomId);
 			connection.serializeAttachment(attachment);
 		}
+
+		// Add bot as room member if not already a member
+		const now = Date.now();
+		try {
+			// Check if bot is already a member
+			const existingMember = this.ctx.storage.sql.exec(
+				`SELECT 1 FROM room_members WHERE room_id = ? AND user_id = ?`,
+				roomId,
+				"bot"
+			).toArray();
+
+			if (existingMember.length === 0) {
+				// Add bot as room member
+				this.ctx.storage.sql.exec(
+					`INSERT INTO room_members (room_id, user_id, joined_at) VALUES (?, ?, ?)`,
+					roomId,
+					"bot",
+					now
+				);
+				console.log(`[Bot] Added bot as member of room ${roomId}`);
+			}
+		} catch (error) {
+			console.error(`[Bot] Failed to add bot as room member: ${error}`);
+		}
 	}
 
 	handleBotUnsubscribe(connection: Connection, roomId: string) {
