@@ -76,6 +76,7 @@ export type WSMessage =
 	| { type: "sync_response"; messages: Message[]; users: User[] }
 	| { type: "user_online"; user_id: string }
 	| { type: "user_offline"; user_id: string }
+	| { type: "room_deleted"; room_id: string }
 	| { type: "error"; message: string };
 
 // Bot WebSocket message types

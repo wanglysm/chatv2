@@ -380,6 +380,22 @@ function ChatPage() {
 					return newSet;
 				});
 				break;
+
+			case "room_deleted": {
+				const deletedRoomId = message.room_id;
+				// If currently viewing this room, clear it
+				if (selectedRoom?.id === deletedRoomId) {
+					setSelectedRoom(null);
+					setMessages([]);
+				}
+				// Remove from room list
+				setRooms((prev) => prev.filter((r) => r.id !== deletedRoomId));
+				// Clear local IndexedDB data
+				chatDB.clearRoomData(deletedRoomId).catch(() => {
+					// Ignore IndexedDB errors
+				});
+				break;
+			}
 		}
 	}, [selectedRoom, currentUser]);
 

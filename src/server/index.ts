@@ -571,11 +571,23 @@ export class ChatV2 extends Server<Env> {
 			);
 		}
 
+		// Get room members before deletion for notification
+		const members = this.ctx.storage.sql.exec(`SELECT user_id FROM room_members WHERE room_id = '${roomId}'`).toArray() as { user_id: string }[];
+
 		// Delete in correct order: message_acks -> messages -> room_members -> rooms
 		this.ctx.storage.sql.exec(`DELETE FROM message_acks WHERE message_id IN (SELECT id FROM messages WHERE room_id = '${roomId}')`);
 		this.ctx.storage.sql.exec(`DELETE FROM messages WHERE room_id = '${roomId}'`);
 		this.ctx.storage.sql.exec(`DELETE FROM room_members WHERE room_id = '${roomId}'`);
 		this.ctx.storage.sql.exec(`DELETE FROM rooms WHERE id = '${roomId}'`);
+
+		// Notify all room members via WebSocket
+		const memberIds = new Set(members.map((m) => m.user_id));
+		for (const connection of this.ctx.getWebSockets()) {
+			const attachment = connection.deserializeAttachment() as ConnectionAttachment | null;
+			if (attachment?.type === "user" && memberIds.has(attachment.userId)) {
+				connection.send(JSON.stringify({ type: "room_deleted", room_id: roomId } as WSMessage));
+			}
+		}
 
 		return new Response(
 			JSON.stringify({ success: true } as APIResponse),
