@@ -3,7 +3,7 @@ import PartySocket from "partysocket";
 import type { WSMessage } from "../../shared";
 
 const HEARTBEAT_INTERVAL = 30000; // 30 seconds
-const RECONNECT_BASE_DELAY = 1000; // 1 second
+const RECONNECT_BASE_DELAY = 3000; // 3 seconds
 const MAX_RECONNECT_DELAY = 30000; // 30 seconds
 
 type ConnectionState = "connecting" | "connected" | "disconnected" | "reconnecting";
