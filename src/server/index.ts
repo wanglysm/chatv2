@@ -1095,6 +1095,16 @@ export class ChatV2 extends Server<Env> {
 		// Add bot as room member if not already a member
 		const now = Date.now();
 		try {
+			// Ensure bot user exists (for servers where bot user wasn't created)
+			const botUserExists = this.ctx.storage.sql.exec(`SELECT * FROM users WHERE id = 'bot'`).toArray();
+			if (botUserExists.length === 0) {
+				this.ctx.storage.sql.exec(`
+					INSERT INTO users (id, username, password, role, avatar, created_at)
+					VALUES ('bot', 'AI助手', '', 'user', '🤖', ${now})
+				`);
+				console.log(`[Bot] Created bot user`);
+			}
+
 			// Check if bot is already a member
 			const existingMember = this.ctx.storage.sql.exec(
 				`SELECT 1 FROM room_members WHERE room_id = ? AND user_id = ?`,
