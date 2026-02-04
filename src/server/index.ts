@@ -411,8 +411,29 @@ export class ChatV2 extends Server<Env> {
 			return room;
 		});
 
+		// Calculate unread counts for each room
+		const unreadCounts: Record<string, number> = {};
+		for (const room of roomsWithDisplayName) {
+			const unreadResult = this.ctx.storage.sql.exec(`
+				SELECT COUNT(*) as count FROM messages m
+				WHERE m.room_id = '${room.id}'
+				AND m.user_id != '${userId}'
+				AND NOT EXISTS (
+					SELECT 1 FROM message_acks ma 
+					WHERE ma.message_id = m.id AND ma.user_id = '${userId}'
+				)
+			`).toArray()[0] as { count: number } | undefined;
+			unreadCounts[room.id] = unreadResult?.count || 0;
+		}
+
 		return new Response(
-			JSON.stringify({ success: true, data: roomsWithDisplayName } as APIResponse),
+			JSON.stringify({ 
+				success: true, 
+				data: { 
+					rooms: roomsWithDisplayName,
+					unread_counts: unreadCounts 
+				} 
+			} as APIResponse),
 			{ headers: { "Content-Type": "application/json" } }
 		);
 	}
@@ -1200,8 +1221,8 @@ export class ChatV2 extends Server<Env> {
 				}
 			} else if (attachment.type === "bot") {
 				botCount++;
-				// Broadcast user messages from any room to bot
-				if (message.type === "new_message") {
+				// Only broadcast to bot if this is a bot room (bot is a member)
+				if (memberIds.has("bot") && message.type === "new_message") {
 					const newMessage = message as Extract<WSMessage, { type: "new_message" }>;
 
 					if (newMessage.message.source === "user") {

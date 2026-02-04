@@ -421,9 +421,13 @@ function ChatPage() {
 				headers: { Authorization: `Bearer ${session.id}` },
 			});
 
-			const data = (await response.json()) as APIResponse<Room[]>;
+			const data = (await response.json()) as APIResponse<{ rooms: Room[]; unread_counts: Record<string, number> }>;
 			if (data.success && data.data) {
-				setRooms(data.data);
+				setRooms(data.data.rooms);
+				// Set unread counts
+				if (data.data.unread_counts) {
+					setUnreadCounts(new Map(Object.entries(data.data.unread_counts)));
+				}
 			}
 		} catch {
 			// Ignore load rooms error
