@@ -701,6 +701,7 @@ function ChatPage() {
 					setMessages([]);
 				}
 				loadRooms();
+				await chatDB.clearRoomData(roomId);
 			}
 		} catch {
 			// Ignore delete room error
